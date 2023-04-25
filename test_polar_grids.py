@@ -220,9 +220,20 @@ def test_areas():
     assert np.isnan(surf_array[6][71])
     assert np.isnan(surf_array[54][64])
 
+
 def test_volumes():
-    pass
+    my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
+    voronoi_grid = my_pg.get_full_voronoi_grid()
+    voronoi_volumes = voronoi_grid.get_all_voronoi_volumes()
+
+    # first layer
+    assert np.allclose(voronoi_volumes[0:74:5], pi*3.5**2/15)
+    # higher layers where you need to subtract previous ones
+    assert np.allclose(voronoi_volumes[1:74:5], pi * 4.5 ** 2 / 15 - pi * 3.5 ** 2 / 15)
+    assert np.allclose(voronoi_volumes[2:74:5], pi * 5.5 ** 2 / 15 - pi * 4.5 ** 2 / 15)
+    assert np.allclose(voronoi_volumes[3:74:5], pi * 6.5 ** 2 / 15 - pi * 5.5 ** 2 / 15)
+    assert np.allclose(voronoi_volumes[4:74:5], pi * 7.5 ** 2 / 15 - pi * 6.5 ** 2 / 15)
+
 
 if __name__ == "__main__":
-    test_distances()
-    test_areas()
+    test_volumes()

@@ -240,19 +240,19 @@ class ArrayPlot(RepresentationCollection):
 
 
 if __name__ == "__main__":
-    # from potentials import FlatSymmetricalDoubleWell
-    # potential = FlatSymmetricalDoubleWell(12, 4, 7.5)
-    # my_grid = PolarGrid(r_lim=(0, 8))
-    #
-    # pp = PotentialPlot(potential, my_grid, default_context="talk")
-    #
-    # fig, ax = plt.subplots(1, 2)
-    # pp.plot_one_ray(theta=7, fig=fig, ax=ax[0], color="red", save=False)
-    # pp.plot_one_ray(theta=22, fig=fig, ax=ax[1], color="blue")
-    #
-    # pp.plot_colored_circles()
-    #
-    # pp.plot_potential_3D(animate_rot=True)
+    from potentials import FlatSymmetricalDoubleWell
+    potential = FlatSymmetricalDoubleWell(12, 4, 7.5)
+    my_grid = PolarGrid(r_lim=(0, 8))
+
+    pp = PotentialPlot(potential, my_grid, default_context="talk")
+
+    fig, ax = plt.subplots(1, 2)
+    pp.plot_one_ray(theta=7, fig=fig, ax=ax[0], color="red", save=False)
+    pp.plot_one_ray(theta=22, fig=fig, ax=ax[1], color="blue")
+
+    pp.plot_colored_circles()
+
+    pp.plot_potential_3D(animate_rot=True)
     my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
     pol_plot = PolarPlot(my_pg, default_complexity_level="empty")
     pol_plot.plot_radial_grid()
