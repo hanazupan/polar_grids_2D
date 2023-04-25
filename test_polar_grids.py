@@ -220,6 +220,9 @@ def test_areas():
     assert np.isnan(surf_array[6][71])
     assert np.isnan(surf_array[54][64])
 
+def test_volumes():
+    pass
+
 if __name__ == "__main__":
     test_distances()
     test_areas()
