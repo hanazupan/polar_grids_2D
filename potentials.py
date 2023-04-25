@@ -64,7 +64,7 @@ class FlatSymmetricalDoubleWell(AnalyticalCircularPotential):
     component, the entire circle has the same potential.
     """
 
-    def __init__(self, steepness: float, first_min_r: float, second_min_r: float, **kwargs):
+    def __init__(self, steepness: float = 10, first_min_r: float = 2, second_min_r: float = 1, **kwargs):
         super().__init__(**kwargs)
         self.steepness = steepness
         assert self.steepness > 0
@@ -88,3 +88,24 @@ class FlatSymmetricalDoubleWell(AnalyticalCircularPotential):
         circ_coordinates = super().get_potential(circ_coordinates)
         rs = circ_coordinates.T[0]
         return self.steepness * ((rs - self.first_min_r)**2 - self.second_min_r)**2 + 3*rs
+
+
+class FlatDoubleWellAlpha(FlatSymmetricalDoubleWell):
+
+    def __init__(self, alpha: float, exp_factor: float = 20, exp_min: float = 2, steepness: float = 10,
+                 first_min_r: float = 2, second_min_r: float = 1,
+                 **kwargs):
+        super().__init__(steepness, first_min_r, second_min_r, **kwargs)
+        self.alpha = alpha
+        self.exp_factor = exp_factor
+        self.exp_min = exp_min
+
+    def get_name(self):
+        return f"flat_dw_alpha_{self.alpha}"
+
+    def get_potential(self, circ_coordinates: ArrayLike):
+        dw_part = super().get_potential(circ_coordinates)
+        rs = circ_coordinates.T[0]
+        exp_part = self.alpha * np.exp(-self.exp_factor*(rs-self.exp_min)**2)
+        return dw_part + exp_part
+

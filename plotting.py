@@ -295,7 +295,7 @@ class KineticsPlot(RepresentationCollection):
 
     @fig_ax_wrapper
     def make_one_eigenvector_plot(self, eigenvec_index: int):
-        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index)
+        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index+1)
 
         # shape: (number_cells, num_eigenvectors)
 
@@ -304,6 +304,7 @@ class KineticsPlot(RepresentationCollection):
                                plot_vertex_points=False)
         fgp.plot_gridpoints(ax=self.ax, fig=self.fig, save=False, c=eigenvecs[:, eigenvec_index])
         self.ax.set_title(f"Eigenv. {eigenvec_index}")
+        self._equalize_axes()
         #self.fig.colorbar()
 
 
@@ -335,17 +336,17 @@ if __name__ == "__main__":
     # dist_plot = ArrayPlot(surf_array)
     # dist_plot.make_heatmap_plot(data_name="dist")
 
-    from potentials import FlatSymmetricalDoubleWell
-    potential = FlatSymmetricalDoubleWell(10, 2, 1)
-    pg = PolarGrid(r_lim=(0, 4), num_radial=20, num_angular=15)
-    pp = PotentialPlot(potential, pg, default_context="talk")
-    pp.plot_colored_circles()
-    pp.plot_potential_3D()
-    my_model = FlatSQRA(pg, potential)
-    ArrayPlot(my_model.get_transition_matrix()).make_heatmap_plot()
-    kp = KineticsPlot(my_model)
-    kp.make_its_plot()
-    kp.make_one_eigenvector_plot(0)
-    kp.make_one_eigenvector_plot(1)
-    kp.make_eigenvalues_plot()
-    kp.make_eigenvectors_plot()
+    from potentials import FlatSymmetricalDoubleWell, FlatDoubleWellAlpha
+
+    fig, ax = plt.subplots(1, 3)
+    pg = PolarGrid(r_lim=(0, 4), num_radial=15, num_angular=10)
+    for alpha, subax in zip([0, 15, 25], ax.ravel()):
+        potential = FlatDoubleWellAlpha(alpha)
+        pp = PotentialPlot(potential, pg, default_context="talk")
+        pp.plot_one_ray(fig=fig, ax=subax, save=(alpha==25))
+    fig, ax = plt.subplots(1, 3)
+    for alpha, subax in zip([0, 15, 25], ax.ravel()):
+        potential = FlatDoubleWellAlpha(alpha)
+        my_model = FlatSQRA(pg, potential)
+        kp = KineticsPlot(my_model)
+        kp.make_one_eigenvector_plot(0, fig=fig, ax=subax, save=(alpha==25))
