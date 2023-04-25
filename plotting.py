@@ -12,6 +12,9 @@ from numpy.typing import NDArray
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
+
+from kinetics import FlatSQRA
+from molgri.constants import DIM_SQUARE
 from molgri.plotting.abstract import RepresentationCollection
 from molgri.space.utils import normalise_vectors
 from mpl_toolkits.mplot3d import Axes3D
@@ -170,9 +173,11 @@ class PolarPlot(RepresentationCollection):
         super().__init__(data_name, *args, **kwargs)
 
     @fig_ax_wrapper
-    def plot_gridpoints(self):
+    def plot_gridpoints(self, c = "black"):
         points = self.pg.get_flattened_cartesian_coords()
-        self.ax.scatter(*points.T, color="black", s=2)
+        cmap = "bwr"
+        norm = colors.TwoSlopeNorm(vcenter=0)
+        self.ax.scatter(*points.T, c=c, cmap=cmap, norm=norm)
 
     @fig_ax_wrapper
     def plot_radial_grid(self, **kwargs):
@@ -239,31 +244,108 @@ class ArrayPlot(RepresentationCollection):
         self._equalize_axes()
 
 
+class KineticsPlot(RepresentationCollection):
+
+    def __init__(self, kinetics_model: FlatSQRA):
+        super().__init__("kinetics")
+        self.kinetics_model = kinetics_model
+
+    @fig_ax_wrapper
+    def make_its_plot(self, num_eigenv=6):
+        """
+        Plot iterative timescales.
+        """
+        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=num_eigenv)
+        eigenvals = np.array(eigenvals)
+
+        # for SQRA plot vertical lines
+        for j in range(1, num_eigenv):
+            x_min, x_max = self.ax.get_xlim()
+            self.ax.hlines(- 1 / eigenvals[j], 0, 1, color="black", ls="--")
+
+        self.ax.set_xlim(left=0, right=1)
+        self.ax.set_xlabel(r"$\tau$")
+        self.ax.set_ylabel(r"ITS")
+
+    @fig_ax_wrapper
+    def make_eigenvalues_plot(self, num_eigenv=6):
+        """
+        Visualize the eigenvalues of rate matrix.
+        """
+
+        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=num_eigenv)
+
+        xs = np.linspace(0, 1, num=len(eigenvals))
+        self.ax.scatter(xs, eigenvals, s=5, c="black")
+        for i, eigenw in enumerate(eigenvals):
+            self.ax.vlines(xs[i], eigenw, 0, linewidth=0.5, color="black")
+        self.ax.hlines(0, 0, 1, color="black")
+        self.ax.set_ylabel(f"Eigenvalues")
+        self.ax.axes.get_xaxis().set_visible(False)
+
+    @fig_ax_wrapper
+    def make_eigenvectors_plot(self, num_eigenv: int = 5):
+        """
+        Visualize the energy surface and the first num (default=3) eigenvectors
+        """
+        self.fig, self.ax = plt.subplots(1, num_eigenv, figsize=(num_eigenv*DIM_SQUARE[0], DIM_SQUARE[0]))
+
+        for i, subax in enumerate(self.ax.ravel()):
+            self.make_one_eigenvector_plot(i, ax=subax, fig=self.fig, save=False)
+
+    @fig_ax_wrapper
+    def make_one_eigenvector_plot(self, eigenvec_index: int):
+        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index)
+
+        # shape: (number_cells, num_eigenvectors)
+
+        fgp = PolarPlot(self.kinetics_model.discretisation_grid)
+        fgp.plot_voronoi_cells(fig=self.fig, ax=self.ax, plot_gridpoints=False, numbered=False, save=False,
+                               plot_vertex_points=False)
+        fgp.plot_gridpoints(ax=self.ax, fig=self.fig, save=False, c=eigenvecs[:, eigenvec_index])
+        self.ax.set_title(f"Eigenv. {eigenvec_index}")
+        #self.fig.colorbar()
+
+
 if __name__ == "__main__":
+    # from potentials import FlatSymmetricalDoubleWell
+    # potential = FlatSymmetricalDoubleWell(12, 4, 7.5)
+    # my_grid = PolarGrid(r_lim=(0, 8))
+    #
+    # pp = PotentialPlot(potential, my_grid, default_context="talk")
+    #
+    # fig, ax = plt.subplots(1, 2)
+    # pp.plot_one_ray(theta=7, fig=fig, ax=ax[0], color="red", save=False)
+    # pp.plot_one_ray(theta=22, fig=fig, ax=ax[1], color="blue")
+    #
+    # pp.plot_colored_circles()
+    #
+    # pp.plot_potential_3D(animate_rot=True)
+    # my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
+    # pol_plot = PolarPlot(my_pg, default_complexity_level="empty")
+    # pol_plot.plot_radial_grid()
+    # pol_plot.plot_voronoi_cells(numbered=True)
+    #
+    # voronoi_grid = my_pg.get_full_voronoi_grid()
+    # surf_array = voronoi_grid.get_all_voronoi_surfaces_as_numpy()
+    # surf_plot = ArrayPlot(surf_array)
+    # surf_plot.make_heatmap_plot(data_name="surfaces")
+    #
+    # dist_array = voronoi_grid.get_all_distances_between_centers_as_numpy()
+    # dist_plot = ArrayPlot(surf_array)
+    # dist_plot.make_heatmap_plot(data_name="dist")
+
     from potentials import FlatSymmetricalDoubleWell
-    potential = FlatSymmetricalDoubleWell(12, 4, 7.5)
-    my_grid = PolarGrid(r_lim=(0, 8))
-
-    pp = PotentialPlot(potential, my_grid, default_context="talk")
-
-    fig, ax = plt.subplots(1, 2)
-    pp.plot_one_ray(theta=7, fig=fig, ax=ax[0], color="red", save=False)
-    pp.plot_one_ray(theta=22, fig=fig, ax=ax[1], color="blue")
-
+    potential = FlatSymmetricalDoubleWell(10, 2, 1)
+    pg = PolarGrid(r_lim=(0, 4), num_radial=20, num_angular=15)
+    pp = PotentialPlot(potential, pg, default_context="talk")
     pp.plot_colored_circles()
-
-    pp.plot_potential_3D(animate_rot=True)
-    my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
-    pol_plot = PolarPlot(my_pg, default_complexity_level="empty")
-    pol_plot.plot_radial_grid()
-    pol_plot.plot_voronoi_cells(numbered=True)
-
-    voronoi_grid = my_pg.get_full_voronoi_grid()
-    surf_array = voronoi_grid.get_all_voronoi_surfaces_as_numpy()
-    surf_plot = ArrayPlot(surf_array)
-    surf_plot.make_heatmap_plot(data_name="surfaces")
-
-    dist_array = voronoi_grid.get_all_distances_between_centers_as_numpy()
-    dist_plot = ArrayPlot(surf_array)
-    dist_plot.make_heatmap_plot(data_name="dist")
-
+    pp.plot_potential_3D()
+    my_model = FlatSQRA(pg, potential)
+    ArrayPlot(my_model.get_transition_matrix()).make_heatmap_plot()
+    kp = KineticsPlot(my_model)
+    kp.make_its_plot()
+    kp.make_one_eigenvector_plot(0)
+    kp.make_one_eigenvector_plot(1)
+    kp.make_eigenvalues_plot()
+    kp.make_eigenvectors_plot()

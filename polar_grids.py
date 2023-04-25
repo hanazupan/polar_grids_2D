@@ -26,7 +26,7 @@ from scipy.sparse import coo_array
 from scipy.spatial import SphericalVoronoi
 
 
-from molgri.space.utils import  normalise_vectors
+from molgri.space.utils import normalise_vectors
 
 
 def from_polar_to_cartesian(rs: NDArray, thetas: NDArray) -> tuple[NDArray, NDArray]:

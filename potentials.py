@@ -83,7 +83,8 @@ class FlatSymmetricalDoubleWell(AnalyticalCircularPotential):
         Equation: A((x-m1)^2 - m2)^2
 
         where A > 0 is the steepness of potential walls, m1 and m2 control both minima.
+        The unit of potential is kJ/mol
         """
         circ_coordinates = super().get_potential(circ_coordinates)
         rs = circ_coordinates.T[0]
-        return self.steepness * ((rs - self.first_min_r)**2 - self.second_min_r)**2
+        return self.steepness * ((rs - self.first_min_r)**2 - self.second_min_r)**2 + 3*rs
