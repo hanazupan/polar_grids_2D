@@ -36,6 +36,9 @@ class FlatSQRA:
     def get_potentials(self):
         return self.potential.get_potential(self.discretisation_grid.get_flattened_polar_coords())
 
+    def get_populations(self):
+        return self.potential.get_population(self.discretisation_grid.get_flattened_polar_coords(), T=self.T)
+
     def get_transition_matrix(self):
         """
         Apply the formula:
@@ -53,9 +56,9 @@ class FlatSQRA:
                                                       out=np.zeros_like(self.transition_matrix[i]))
             for j, _ in enumerate(self.transition_matrix):
                 for i, _ in enumerate(self.transition_matrix):
-                    # gromacs uses kJ/mol as energy unit, boltzmann constant is J/K
-                    population = np.exp((potentials[i] - potentials[j]) / (2 * R * self.T))
-                    self.transition_matrix[i, j] *= population
+                    # only for neighbours
+                    if surface_areas[i, j]:
+                        self.transition_matrix[i, j] *= np.exp((potentials[i]-potentials[j])*1000/(R*self.T))
             self.transition_matrix[np.isnan(self.transition_matrix)] = 0.0
             # normalise rows
             sums = np.sum(self.transition_matrix, axis=0)
@@ -75,7 +78,7 @@ class FlatSQRA:
         """
         if self.eigenvec is None or self.eigenval is None or len(self.eigenval) < num_eigenv:
             tm = self.get_transition_matrix()
-            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="LM", sigma=0, **kwargs)
+            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="SR", sigma=0, **kwargs)
             # don't need to deal with complex outputs in case all values are real
             if eigenvec.imag.max() == 0 and eigenval.imag.max() == 0:
                 eigenvec = eigenvec.real
@@ -85,6 +88,12 @@ class FlatSQRA:
             self.eigenval = eigenval[idx]
             self.eigenvec = eigenvec[:, idx]
         return self.eigenval, self.eigenvec
+
+    def get_its(self, num_eigenv: int = 15, **kwargs):
+        eigenvals, eigenvecs = self.get_eigenval_eigenvec(num_eigenv=num_eigenv, **kwargs)
+        eigenvals = np.array(eigenvals)
+        its = - 1 / eigenvals[1:]
+        return its
 
 
 if __name__ == "__main__":

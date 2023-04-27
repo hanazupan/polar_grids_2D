@@ -3,9 +3,12 @@ This module implements different two-dimensional potentials with a radial and ci
 of a double well potential where every minimum forms a circle around the origin.
 """
 from abc import ABC, abstractmethod
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
+from scipy.constants import R, pi
+from scipy.integrate import dblquad
 
 
 class AnalyticalCircularPotential(ABC):
@@ -34,6 +37,8 @@ class AnalyticalCircularPotential(ABC):
 
                               where r is the distance from origin and theta the angle in radians. Angle 0 is defined at
                               the line of the vector (1, 0), straight to the right in x direction
+
+        Unit of potential is kJ/mol.
         """
         # several coordinate pairs provided at once
         if len(circ_coordinates) > 2:
@@ -45,15 +50,30 @@ class AnalyticalCircularPotential(ABC):
             circ_coordinates.reshape((1, 2))
         return circ_coordinates
 
+    def _meshgrid2flat(self, flat_function: Callable, r_meshgrid: NDArray, theta_meshgrid: NDArray):
+        r_flat = np.reshape(r_meshgrid, (-1,))
+        theta_flat = np.reshape(theta_meshgrid, (-1,))
+        flat_coord = np.dstack((r_flat, theta_flat)).squeeze()
+        pot = flat_function(flat_coord)
+        return pot.reshape(r_meshgrid.shape)
+
     def get_potential_as_meshgrid(self, r_meshgrid: NDArray, theta_meshgrid: NDArray) -> NDArray:
         """
         Use a meshgrid of coordinates and get a grid of potentials in the same shape back. Useful for 3D plots.
         """
-        r_flat = np.reshape(r_meshgrid, (-1,))
-        theta_flat = np.reshape(theta_meshgrid, (-1,))
-        flat_coord = np.dstack((r_flat, theta_flat)).squeeze()
-        pot = self.get_potential(flat_coord)
-        return pot.reshape(r_meshgrid.shape)
+        return self._meshgrid2flat(self.get_potential, r_meshgrid, theta_meshgrid)
+
+    def get_population_as_meshgrid(self, r_meshgrid: NDArray, theta_meshgrid: NDArray) -> NDArray:
+        return self._meshgrid2flat(self.get_population, r_meshgrid, theta_meshgrid)
+
+    def get_population(self, circ_coordinates: ArrayLike, T: float = 300):
+        """Using the Boltzmann factor, calculate populations instead of potentials:
+
+        pi_i = 1/Z * e^(-V_i/(RT)
+        """
+        not_norm_pop = np.exp(-self.get_potential(circ_coordinates)*1000/(R*T))
+        pop_sum = np.sum(not_norm_pop)
+        return 1/pop_sum*not_norm_pop
 
 
 class FlatSymmetricalDoubleWell(AnalyticalCircularPotential):
@@ -109,3 +129,20 @@ class FlatDoubleWellAlpha(FlatSymmetricalDoubleWell):
         exp_part = self.alpha * np.exp(-self.exp_factor*(rs-self.exp_min)**2)
         return dw_part + exp_part
 
+
+class RadialMinDoubleWellAlpha(FlatDoubleWellAlpha):
+    #TODO: needs to be periodic!
+
+    def __init__(self, alpha: float, radial_steepness: float = 0.5, radial_min1: float = 0.7,
+                 radial_min2: float = 4.3, exp_factor: float = 20, exp_min: float = 2, steepness: float = 10,
+                 first_min_r: float = 2, second_min_r: float = 1, **kwargs):
+        super().__init__(alpha, exp_factor, exp_min, steepness, first_min_r, second_min_r, **kwargs)
+        self.radial_steepness = radial_steepness
+        self.radial_min1 = radial_min1
+        self.radial_min2 = radial_min2
+
+    def get_potential(self, circ_coordinates: ArrayLike):
+        radial_part = super().get_potential(circ_coordinates)
+        thetas = circ_coordinates.T[1]
+        theta_part = self.radial_steepness*((thetas-self.radial_min1)**2 - self.radial_min2)**2
+        return radial_part * theta_part

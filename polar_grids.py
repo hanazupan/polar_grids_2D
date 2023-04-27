@@ -123,6 +123,13 @@ class PolarGrid:
         xs, ys = self.get_cartesian_meshgrid()
         return np.vstack([xs.ravel(), ys.ravel()]).T
 
+    def assign_to_states(self, states_list: list):
+        flat_coord = self.get_flattened_polar_coords()
+        all_asignments = np.zeros((len(states_list), len(flat_coord)), dtype=bool)
+        for i, state in enumerate(states_list):
+            all_asignments[i] = state(*flat_coord.T)
+        return all_asignments
+
     #################################################################################################################
     #                                        VORONOI CELLS AND GEOMETRY
     #################################################################################################################
@@ -203,7 +210,6 @@ class FlatVoronoiGrid:
         self.full_grid = polar_grid
         self.flat_positions = self.full_grid.get_flattened_cartesian_coords()
         self.all_sv = None
-        self.get_voronoi_discretisation()
 
     ###################################################################################################################
     #                           basic creation/getter functions

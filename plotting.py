@@ -2,12 +2,14 @@
 Plot potentials here.
 """
 from functools import wraps
-from typing import Union
+from typing import Union, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import pandas as pd
 from matplotlib import colors
+from matplotlib.animation import ArtistAnimation, FuncAnimation
 from numpy.typing import NDArray
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
@@ -20,26 +22,13 @@ from molgri.space.utils import normalise_vectors
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.spatial import geometric_slerp
 
-from potentials import AnalyticalCircularPotential
+from potentials import AnalyticalCircularPotential, FlatDoubleWellAlpha, RadialMinDoubleWellAlpha
 from polar_grids import PolarGrid
 
 
-def plot_voronoi_cells(sv, ax, plot_vertex_points=True):
-    #sv.sort_vertices_of_regions()
-    t_vals = np.linspace(0, 1, 2000)
-    # plot Voronoi vertices
-    if plot_vertex_points:
-        ax.scatter(sv.vertices[:, 0], sv.vertices[:, 1], c='g')
-    # indicate Voronoi regions (as Euclidean polygons)
-    for region in sv.regions:
-        n = len(region)
-        for j in range(n):
-            start = sv.vertices[region][j]
-            end = sv.vertices[region][(j + 1) % n]
-            norm = np.linalg.norm(start)
-            result = geometric_slerp(normalise_vectors(start), normalise_vectors(end), t_vals)
-            ax.plot(norm * result[..., 0], norm * result[..., 1], c='k')
-
+#######################################################################################################################
+#                                                 DECORATORS
+#######################################################################################################################
 
 def fig_ax_wrapper(my_method):
 
@@ -94,6 +83,44 @@ def is_3d_plot(my_method):
         return func_value
     return decorated
 
+#######################################################################################################################
+#                                        GENERAL PLOTTING METHODS
+#######################################################################################################################
+
+
+def plot_voronoi_cells(sv, ax, plot_vertex_points=True):
+    t_vals = np.linspace(0, 1, 2000)
+    # plot Voronoi vertices
+    if plot_vertex_points:
+        ax.scatter(sv.vertices[:, 0], sv.vertices[:, 1], c='g')
+    # indicate Voronoi regions (as Euclidean polygons)
+    for region in sv.regions:
+        n = len(region)
+        for j in range(n):
+            start = sv.vertices[region][j]
+            end = sv.vertices[region][(j + 1) % n]
+            norm = np.linalg.norm(start)
+            result = geometric_slerp(normalise_vectors(start), normalise_vectors(end), t_vals)
+            ax.plot(norm * result[..., 0], norm * result[..., 1], c='k')
+
+
+def _ray_plot(pg: PolarGrid, ys_method: Callable, ax, theta: float, plot_line=True, plot_scatter=False,
+              title=False, **kwargs):
+    coords = pg.get_radial_grid(theta=theta)
+    y_values = ys_method(coords)
+
+    color = kwargs.pop("color", "black")
+    if plot_line:
+        sns.lineplot(x=coords.T[0], y=y_values, ax=ax, color=color, **kwargs)
+    if plot_scatter:
+        sns.scatterplot(x=coords.T[0], y=y_values, ax=ax, color=color, **kwargs)
+    if title:
+        ax.set_title(r'$\theta=$' + f"{theta}")
+
+
+#######################################################################################################################
+#                                                 PLOTTING CLASSES
+#######################################################################################################################
 
 class PotentialPlot(RepresentationCollection):
 
@@ -128,41 +155,85 @@ class PotentialPlot(RepresentationCollection):
         self.ax.set_ylabel("y")
         cbar.ax.set_ylabel("Potential")
 
+    # ##################################### PLOTS THAT ARE JUST LINES ####################################
+
     @fig_ax_wrapper
-    def plot_one_ray(self, theta: float = 0, **kwargs):
+    def plot_potential_ray(self, theta: float = 0, **kwargs):
         """
         A plot that shows how potential changes with radial distance for a specific angle theta.
         """
-        # calculate potentials for all these different radii and the value of theta
-        coords = self.grid.get_radial_grid(theta=theta)
-        potential_per_r = self.acp.get_potential(coords)
-
         color = kwargs.pop("color", "black")
-        sns.lineplot(x=coords.T[0], y=potential_per_r, ax=self.ax, color=color, **kwargs)
-        self.ax.set_title(r'$\theta=$'+f"{theta}")
+        _ray_plot(pg=self.grid, ys_method=self.acp.get_potential, ax=self.ax, theta=theta, color=color, **kwargs)
 
     @fig_ax_wrapper
-    def plot_colored_circles(self):
+    def plot_population_ray(self, theta: float = 0, **kwargs):
+        """
+        A plot that shows how population changes with radial distance for a specific angle theta.
+        """
+        color = kwargs.pop("color", "blue")
+        _ray_plot(pg=self.grid, ys_method=self.acp.get_population, ax=self.ax, theta=theta, color=color, **kwargs)
+
+    @fig_ax_wrapper
+    def plot_populations_by_assignment(self):
+        condition = [lambda r, t: r < 2, lambda r, t: r >= 2]
+        names = ["r < 2", "r > 2"]
+        colors = ["red", "blue"]
+
+        population = self.acp.get_population(self.grid.get_flattened_polar_coords())
+        assignments = self.grid.assign_to_states(condition)
+        for assig, name, color in zip(assignments, names, colors):
+            self.ax.hlines(np.sum(population[assig]), 0, 1, color=color, label=name)
+        self.ax.set_ylim(0, 1)
+        self.ax.legend()
+
+    # ############################ PLOTS THAT ARE FLAT CIRCLES WITH COLORS IF NEEDED ###############################
+
+    def _plot_circle(self, y_method: Callable, colorbar=False, **kwargs):
+        coords = self.grid.get_flattened_polar_coords()
+        potentials = y_method(coords)
+        xy_coords = self.grid.get_flattened_cartesian_coords()
+        s = kwargs.pop("s", 2)
+        sns.scatterplot(x=xy_coords.T[0], y=xy_coords.T[1], ax=self.ax, hue=potentials, palette=self.default_cmap, s=s,
+                        legend=False)
+        self._equalize_axes()
+        if colorbar:
+            self._colorbar_x_y_potential(potentials)
+
+    @fig_ax_wrapper
+    def plot_potential_circles(self, colorbar=False, **kwargs):
         """
         A plot that shows the view from above - concentrical circles of potential values.
         """
-        coords = self.grid.get_flattened_polar_coords()
-        potentials = self.acp.get_potential(coords)
-        xy_coords = self.grid.get_flattened_cartesian_coords()
+        self._plot_circle(y_method=self.acp.get_potential, colorbar=colorbar, **kwargs)
 
-        sns.scatterplot(x=xy_coords.T[0], y=xy_coords.T[1], ax=self.ax, hue=potentials, palette=self.default_cmap, s=2)
+    @fig_ax_wrapper
+    def plot_population_circles(self, colorbar=False, **kwargs):
+        """
+        A plot that shows the view from above - concentrical circles of potential values.
+        """
+        self._plot_circle(y_method=self.acp.get_population, colorbar=colorbar, **kwargs)
 
-        self._colorbar_x_y_potential(potentials)
+    # #################################### PLOTS THAT ARE IN 3D ########################################
+
+    def _plot_in_3D(self, ys_method: Callable, colorbar: bool, **kwargs):
+        coord_meshgrid = self.grid.get_polar_meshgrid()
+        X, Y = self.grid.get_cartesian_meshgrid()
+        potentials = ys_method(coord_meshgrid[0], coord_meshgrid[1])
+
+        self.ax.plot_surface(X, Y, potentials, cmap=self.default_cmap, linewidth=0, antialiased=False, alpha=0.5,
+                             **kwargs)
+        if colorbar:
+            self._colorbar_x_y_potential(potentials)
 
     @is_3d_plot
     @fig_ax_wrapper
-    def plot_potential_3D(self):
-        coord_meshgrid = self.grid.get_polar_meshgrid()
-        X, Y = self.grid.get_cartesian_meshgrid()
-        potentials = self.acp.get_potential_as_meshgrid(coord_meshgrid[0], coord_meshgrid[1])
+    def plot_potential_3D(self, colorbar=False, **kwargs):
+        self._plot_in_3D(ys_method=self.acp.get_potential_as_meshgrid, colorbar=colorbar, **kwargs)
 
-        self.ax.plot_surface(X, Y, potentials, cmap=self.default_cmap, linewidth=0, antialiased=False, alpha=0.5)
-        self._colorbar_x_y_potential(potentials)
+    @is_3d_plot
+    @fig_ax_wrapper
+    def plot_population_3D(self, colorbar=False, **kwargs):
+        self._plot_in_3D(ys_method=self.acp.get_population_as_meshgrid, colorbar=colorbar, **kwargs)
 
 
 class PolarPlot(RepresentationCollection):
@@ -180,16 +251,12 @@ class PolarPlot(RepresentationCollection):
         self.ax.scatter(*points.T, c=c, cmap=cmap, norm=norm)
 
     @fig_ax_wrapper
-    def plot_radial_grid(self, **kwargs):
+    def plot_radial_grid(self, theta: float = 0, **kwargs):
         """
         A plot that shows how potential changes with radial distance for a specific angle theta.
         """
-        # calculate potentials for all these different radii and the value of theta
-        coords = self.pg.get_radial_grid()
-
-        color = kwargs.pop("color", "black")
-        sns.lineplot(x=coords.T[0], y=coords.T[1], ax=self.ax, color=color, markers=True, **kwargs)
-        sns.scatterplot(x=coords.T[0], y=coords.T[1], ax=self.ax, color=color, **kwargs)
+        _ray_plot(pg=self.pg, ax=self.ax, ys_method=(lambda x: 0), theta=theta,
+                  color="black", plot_line=True, plot_scatter=True)
 
     @fig_ax_wrapper
     def plot_voronoi_cells(self, numbered=False, plot_gridpoints=True, plot_vertex_points=True):
@@ -295,17 +362,74 @@ class KineticsPlot(RepresentationCollection):
 
     @fig_ax_wrapper
     def make_one_eigenvector_plot(self, eigenvec_index: int):
-        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index+1)
+        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index+2)
 
         # shape: (number_cells, num_eigenvectors)
 
         fgp = PolarPlot(self.kinetics_model.discretisation_grid)
-        fgp.plot_voronoi_cells(fig=self.fig, ax=self.ax, plot_gridpoints=False, numbered=False, save=False,
-                               plot_vertex_points=False)
+        #fgp.plot_voronoi_cells(fig=self.fig, ax=self.ax, plot_gridpoints=False, numbered=False, save=False,
+        #                       plot_vertex_points=False)
         fgp.plot_gridpoints(ax=self.ax, fig=self.fig, save=False, c=eigenvecs[:, eigenvec_index])
         self.ax.set_title(f"Eigenv. {eigenvec_index}")
         self._equalize_axes()
         #self.fig.colorbar()
+
+
+class ConvergenceWithAlphaPlot(RepresentationCollection):
+
+    def __init__(self, grid: PolarGrid, alphas: list = None, potential_class = FlatDoubleWellAlpha,
+                 potential_parameters = (), kinetics_class = FlatSQRA, kinetics_parameters = ()):
+        if alphas is None:
+            alphas = np.linspace(0, 25)
+        self.alphas = alphas
+        self.all_potentials = []
+        for alpha in self.alphas:
+            self.all_potentials.append(potential_class(alpha=alpha, *potential_parameters))
+        self.grid = grid
+        self.all_kinetics = []
+        self.kinetics_class = kinetics_class
+        self.kinetics_parameters = kinetics_parameters
+        super().__init__("")
+
+    def get_all_kinetics(self):
+        if not self.all_kinetics:
+            for potential in self.all_potentials:
+                self.all_kinetics.append(self.kinetics_class(self.grid, potential, *self.kinetics_parameters))
+        return self.all_kinetics
+
+    @fig_ax_wrapper
+    def plot_population_ray_convergence(self, **kwargs):
+
+        def animate(i):
+            pp = PotentialPlot(self.all_potentials[i], self.grid, default_context="talk")
+
+            pp.plot_potential_ray(fig=self.fig, ax=self.ax, color="black")
+            ax2 = self.ax.twinx()
+            pp.plot_population_ray(fig=self.fig, ax=ax2, color="blue")
+            self.ax.set_title(f"alpha={np.round(alpha, 3)}")
+            return self.fig, self.ax
+
+        anim = FuncAnimation(self.fig, animate, frames=180, interval=50)
+        dpi = kwargs.pop("dpi", 200)
+        self._save_animation_type(anim, "population_ray", fps=10, dpi=dpi)
+
+    @fig_ax_wrapper
+    def plot_its_convergence(self, num_eigenv=3):
+        all_kin = self.get_all_kinetics()
+        data = np.zeros((len(self.alphas), num_eigenv))
+        for i, kin in enumerate(all_kin):
+            its = kin.get_its(num_eigenv+1)
+            data[i] = its
+        columns = []
+        for i in range(num_eigenv):
+            columns.append(f"ITS {i+1}")
+        df = pd.DataFrame(data, columns=columns, index=self.alphas)
+        sns.lineplot(data=df, ax=self.ax)
+        self.ax.set_yscale("log")
+
+    @fig_ax_wrapper
+    def plot_eigenvector_ray_convergence(self, eigenvec_index: int):
+        pass
 
 
 if __name__ == "__main__":
@@ -336,17 +460,45 @@ if __name__ == "__main__":
     # dist_plot = ArrayPlot(surf_array)
     # dist_plot.make_heatmap_plot(data_name="dist")
 
-    from potentials import FlatSymmetricalDoubleWell, FlatDoubleWellAlpha
 
-    fig, ax = plt.subplots(1, 3)
-    pg = PolarGrid(r_lim=(0, 4), num_radial=15, num_angular=10)
-    for alpha, subax in zip([0, 15, 25], ax.ravel()):
+
+    alphas = [0, 12, 25]
+    num_rows = 5
+    num_columns = len(alphas)
+    fig = plt.figure()
+    pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=20, num_angular=15)
+
+    cwap = ConvergenceWithAlphaPlot(pg)
+    #cwap.plot_its_convergence()
+    cwap.plot_population_ray_convergence()
+
+    for i, alpha in enumerate(alphas):
         potential = FlatDoubleWellAlpha(alpha)
         pp = PotentialPlot(potential, pg, default_context="talk")
-        pp.plot_one_ray(fig=fig, ax=subax, save=(alpha==25))
-    fig, ax = plt.subplots(1, 3)
-    for alpha, subax in zip([0, 15, 25], ax.ravel()):
+        ax1 = fig.add_subplot(num_rows, num_columns, 1+i)
+        pp.plot_potential_ray(fig=fig, ax=ax1, save=False)
+        ax_left = ax1.twinx()
+        pp.plot_population_ray(fig=fig, ax=ax_left, save=False)
+        ax2 = fig.add_subplot(num_rows, num_columns, num_columns+i+1)
+        pp.plot_potential_circles(fig=fig, ax=ax2, save=False)
+        ax3 = fig.add_subplot(num_rows, num_columns, 2*num_columns+i+1)
+        pp.plot_population_circles(fig=fig, ax=ax3, save=False)
+        ax4 = fig.add_subplot(num_rows, num_columns, 3*num_columns+i+1)
+        pp.plot_populations_by_assignment(fig=fig, ax=ax4, save=False)
+        ax5 = fig.add_subplot(num_rows, num_columns, 4*num_columns+i+1, projection='3d')
+        pp.plot_population_3D(fig=fig, ax=ax5, save=(alpha == np.max(alphas)))
+
+
+    fig, ax = plt.subplots(4, 3)
+    for i, alpha in enumerate(alphas):
+        potential = FlatDoubleWellAlpha(alpha)
+        pp = PotentialPlot(potential, pg, default_context="talk")
+        pp.plot_population_ray(fig=fig, ax=ax[0][i], save=False)
+        # second type of plot
         potential = FlatDoubleWellAlpha(alpha)
         my_model = FlatSQRA(pg, potential)
         kp = KineticsPlot(my_model)
-        kp.make_one_eigenvector_plot(0, fig=fig, ax=subax, save=(alpha==25))
+        kp.make_its_plot(fig=fig, ax=ax[1][i], save=False)
+        kp.make_one_eigenvector_plot(0, fig=fig, ax=ax[2][i], save=False)
+        # third type of plot
+        kp.make_eigenvalues_plot(fig=fig, ax=ax[3][i], save=(alpha == np.max(alphas)))
