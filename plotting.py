@@ -22,7 +22,8 @@ from molgri.space.utils import normalise_vectors
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.spatial import geometric_slerp
 
-from potentials import AnalyticalCircularPotential, FlatDoubleWellAlpha, RadialMinDoubleWellAlpha
+from potentials import AnalyticalCircularPotential, FlatDoubleWellAlpha, RadialMinDoubleWellAlpha, \
+    FlatSymmetricalDoubleWell
 from polar_grids import PolarGrid
 
 
@@ -111,11 +112,12 @@ def _ray_plot(pg: PolarGrid, ys_method: Callable, ax, theta: float, plot_line=Tr
 
     color = kwargs.pop("color", "black")
     if plot_line:
-        sns.lineplot(x=coords.T[0], y=y_values, ax=ax, color=color, **kwargs)
+        ray = sns.lineplot(x=coords.T[0], y=y_values, ax=ax, color=color, **kwargs)
     if plot_scatter:
-        sns.scatterplot(x=coords.T[0], y=y_values, ax=ax, color=color, **kwargs)
+        ray = sns.scatterplot(x=coords.T[0], y=y_values, ax=ax, color=color, **kwargs)
     if title:
         ax.set_title(r'$\theta=$' + f"{theta}")
+    return ray
 
 
 #######################################################################################################################
@@ -163,7 +165,7 @@ class PotentialPlot(RepresentationCollection):
         A plot that shows how potential changes with radial distance for a specific angle theta.
         """
         color = kwargs.pop("color", "black")
-        _ray_plot(pg=self.grid, ys_method=self.acp.get_potential, ax=self.ax, theta=theta, color=color, **kwargs)
+        return _ray_plot(pg=self.grid, ys_method=self.acp.get_potential, ax=self.ax, theta=theta, color=color, **kwargs)
 
     @fig_ax_wrapper
     def plot_population_ray(self, theta: float = 0, **kwargs):
@@ -171,7 +173,7 @@ class PotentialPlot(RepresentationCollection):
         A plot that shows how population changes with radial distance for a specific angle theta.
         """
         color = kwargs.pop("color", "blue")
-        _ray_plot(pg=self.grid, ys_method=self.acp.get_population, ax=self.ax, theta=theta, color=color, **kwargs)
+        return _ray_plot(pg=self.grid, ys_method=self.acp.get_population, ax=self.ax, theta=theta, color=color, **kwargs)
 
     @fig_ax_wrapper
     def plot_populations_by_assignment(self):
@@ -374,6 +376,24 @@ class KineticsPlot(RepresentationCollection):
         self._equalize_axes()
         #self.fig.colorbar()
 
+    @fig_ax_wrapper
+    def make_one_eigenvector_ray_plot(self, eigenvec_index: int, **kwargs):
+        eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index + 2)
+
+        # shape: (number_cells, num_eigenvectors)
+        # average over all directions so that the shape goes to (num_radial, num_eigenvectors)
+        num_ray_cells = self.kinetics_model.discretisation_grid.num_radial
+        num_angular = self.kinetics_model.discretisation_grid.num_angular
+        eigenvecs = eigenvecs.T[eigenvec_index]
+        # everything thet is at the same distance from origin should be averaged
+        eigenvecs = eigenvecs.reshape((num_ray_cells, num_angular))
+        eigenvecs = eigenvecs.T
+        eigenvecs = np.average(eigenvecs, axis=0)
+
+        xs = self.kinetics_model.discretisation_grid.rs
+        self.ax.set_ylabel(f"Eigenvector {eigenvec_index}")
+        sns.lineplot(ax=self.ax, x=xs, y=eigenvecs, **kwargs)
+
 
 class ConvergenceWithAlphaPlot(RepresentationCollection):
 
@@ -402,14 +422,21 @@ class ConvergenceWithAlphaPlot(RepresentationCollection):
 
         def animate(i):
             pp = PotentialPlot(self.all_potentials[i], self.grid, default_context="talk")
+            try:
+                self.ax.lines.pop()
+                ax2.lines.pop()
+            except:
+                pass
+            pp.plot_potential_ray(ax=self.ax, color="black", save=False) #,fig=self.fig,
+            pp.plot_population_ray(ax=ax2, color="blue", save=False)
+            self.ax.set_title(f"alpha={np.round(self.alphas[i], 3)}")
+            return self.ax
 
-            pp.plot_potential_ray(fig=self.fig, ax=self.ax, color="black")
-            ax2 = self.ax.twinx()
-            pp.plot_population_ray(fig=self.fig, ax=ax2, color="blue")
-            self.ax.set_title(f"alpha={np.round(alpha, 3)}")
-            return self.fig, self.ax
-
-        anim = FuncAnimation(self.fig, animate, frames=180, interval=50)
+        ax2 = self.ax.twinx()
+        ax2.set_ylim(0, 0.21)
+        self.ax.set_ylabel("Potential")
+        ax2.set_ylabel("Population")
+        anim = FuncAnimation(self.fig, animate, frames=len(self.alphas), interval=50)
         dpi = kwargs.pop("dpi", 200)
         self._save_animation_type(anim, "population_ray", fps=10, dpi=dpi)
 
@@ -428,8 +455,28 @@ class ConvergenceWithAlphaPlot(RepresentationCollection):
         self.ax.set_yscale("log")
 
     @fig_ax_wrapper
-    def plot_eigenvector_ray_convergence(self, eigenvec_index: int):
-        pass
+    def plot_eigenvector_ray_convergence(self, eigenvec_index: int, **kwargs):
+
+        def animate(i):
+            pp = PotentialPlot(self.all_potentials[i], self.grid, default_context="talk")
+            try:
+                self.ax.lines.pop()
+                ax2.lines.pop()
+            except:
+                pass
+            pp.plot_potential_ray(ax=self.ax, color="black", save=False) #,fig=self.fig,
+            kp = KineticsPlot(self.get_all_kinetics()[i])
+            kp.make_one_eigenvector_ray_plot(eigenvec_index=eigenvec_index, ax=ax2, color="red", save=False)
+            self.ax.set_title(f"alpha={np.round(self.alphas[i], 3)}")
+            return self.ax
+
+        ax2 = self.ax.twinx()
+        ax2.set_ylim(-0.21, 0.21)
+        self.ax.set_ylabel("Potential")
+        ax2.set_ylabel(f"Eigenvector {eigenvec_index}")
+        anim = FuncAnimation(self.fig, animate, frames=len(self.alphas), interval=50)
+        dpi = kwargs.pop("dpi", 200)
+        self._save_animation_type(anim, f"eigenvector_{eigenvec_index}_ray", fps=10, dpi=dpi)
 
 
 if __name__ == "__main__":
@@ -460,45 +507,53 @@ if __name__ == "__main__":
     # dist_plot = ArrayPlot(surf_array)
     # dist_plot.make_heatmap_plot(data_name="dist")
 
-
-
     alphas = [0, 12, 25]
     num_rows = 5
     num_columns = len(alphas)
     fig = plt.figure()
-    pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=20, num_angular=15)
+    pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=60, num_angular=8)
+
+    my_pot = FlatSymmetricalDoubleWell()
+    kin_model = FlatSQRA(pg, my_pot)
+    kp = KineticsPlot(kinetics_model=kin_model)
+    kp.make_one_eigenvector_ray_plot(0)
+    kp.make_one_eigenvector_ray_plot(1)
+    kp.make_one_eigenvector_ray_plot(2)
 
     cwap = ConvergenceWithAlphaPlot(pg)
     #cwap.plot_its_convergence()
-    cwap.plot_population_ray_convergence()
+    #cwap.plot_population_ray_convergence()
+    cwap.plot_eigenvector_ray_convergence(2)
+    cwap.plot_eigenvector_ray_convergence(0)
+    cwap.plot_eigenvector_ray_convergence(1)
 
-    for i, alpha in enumerate(alphas):
-        potential = FlatDoubleWellAlpha(alpha)
-        pp = PotentialPlot(potential, pg, default_context="talk")
-        ax1 = fig.add_subplot(num_rows, num_columns, 1+i)
-        pp.plot_potential_ray(fig=fig, ax=ax1, save=False)
-        ax_left = ax1.twinx()
-        pp.plot_population_ray(fig=fig, ax=ax_left, save=False)
-        ax2 = fig.add_subplot(num_rows, num_columns, num_columns+i+1)
-        pp.plot_potential_circles(fig=fig, ax=ax2, save=False)
-        ax3 = fig.add_subplot(num_rows, num_columns, 2*num_columns+i+1)
-        pp.plot_population_circles(fig=fig, ax=ax3, save=False)
-        ax4 = fig.add_subplot(num_rows, num_columns, 3*num_columns+i+1)
-        pp.plot_populations_by_assignment(fig=fig, ax=ax4, save=False)
-        ax5 = fig.add_subplot(num_rows, num_columns, 4*num_columns+i+1, projection='3d')
-        pp.plot_population_3D(fig=fig, ax=ax5, save=(alpha == np.max(alphas)))
-
-
-    fig, ax = plt.subplots(4, 3)
-    for i, alpha in enumerate(alphas):
-        potential = FlatDoubleWellAlpha(alpha)
-        pp = PotentialPlot(potential, pg, default_context="talk")
-        pp.plot_population_ray(fig=fig, ax=ax[0][i], save=False)
-        # second type of plot
-        potential = FlatDoubleWellAlpha(alpha)
-        my_model = FlatSQRA(pg, potential)
-        kp = KineticsPlot(my_model)
-        kp.make_its_plot(fig=fig, ax=ax[1][i], save=False)
-        kp.make_one_eigenvector_plot(0, fig=fig, ax=ax[2][i], save=False)
-        # third type of plot
-        kp.make_eigenvalues_plot(fig=fig, ax=ax[3][i], save=(alpha == np.max(alphas)))
+    # for i, alpha in enumerate(alphas):
+    #     potential = FlatDoubleWellAlpha(alpha)
+    #     pp = PotentialPlot(potential, pg, default_context="talk")
+    #     ax1 = fig.add_subplot(num_rows, num_columns, 1+i)
+    #     pp.plot_potential_ray(fig=fig, ax=ax1, save=False)
+    #     ax_left = ax1.twinx()
+    #     pp.plot_population_ray(fig=fig, ax=ax_left, save=False)
+    #     ax2 = fig.add_subplot(num_rows, num_columns, num_columns+i+1)
+    #     pp.plot_potential_circles(fig=fig, ax=ax2, save=False)
+    #     ax3 = fig.add_subplot(num_rows, num_columns, 2*num_columns+i+1)
+    #     pp.plot_population_circles(fig=fig, ax=ax3, save=False)
+    #     ax4 = fig.add_subplot(num_rows, num_columns, 3*num_columns+i+1)
+    #     pp.plot_populations_by_assignment(fig=fig, ax=ax4, save=False)
+    #     ax5 = fig.add_subplot(num_rows, num_columns, 4*num_columns+i+1, projection='3d')
+    #     pp.plot_population_3D(fig=fig, ax=ax5, save=(alpha == np.max(alphas)))
+    #
+    #
+    # fig, ax = plt.subplots(4, 3)
+    # for i, alpha in enumerate(alphas):
+    #     potential = FlatDoubleWellAlpha(alpha)
+    #     pp = PotentialPlot(potential, pg, default_context="talk")
+    #     pp.plot_population_ray(fig=fig, ax=ax[0][i], save=False)
+    #     # second type of plot
+    #     potential = FlatDoubleWellAlpha(alpha)
+    #     my_model = FlatSQRA(pg, potential)
+    #     kp = KineticsPlot(my_model)
+    #     kp.make_its_plot(fig=fig, ax=ax[1][i], save=False)
+    #     kp.make_one_eigenvector_plot(0, fig=fig, ax=ax[2][i], save=False)
+    #     # third type of plot
+    #     kp.make_eigenvalues_plot(fig=fig, ax=ax[3][i], save=(alpha == np.max(alphas)))

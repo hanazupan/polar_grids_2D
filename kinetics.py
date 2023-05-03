@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 from numpy.typing import NDArray
 from scipy.constants import R
-from scipy.sparse.linalg import eigs
+from scipy.sparse.linalg import eigs, eigsh
 
 from polar_grids import PolarGrid
 from potentials import AnalyticalCircularPotential
@@ -78,7 +78,11 @@ class FlatSQRA:
         """
         if self.eigenvec is None or self.eigenval is None or len(self.eigenval) < num_eigenv:
             tm = self.get_transition_matrix()
-            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="SR", sigma=0, **kwargs)
+            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="SR", sigma=0, **kwargs) #
+            num_rad = self.discretisation_grid.num_radial
+            print("eigv", eigenvec[:num_rad, :])
+            print("pot", self.get_potentials()[:num_rad])
+            print("pop", self.get_populations()[:num_rad])
             # don't need to deal with complex outputs in case all values are real
             if eigenvec.imag.max() == 0 and eigenval.imag.max() == 0:
                 eigenvec = eigenvec.real
@@ -87,6 +91,10 @@ class FlatSQRA:
             idx = eigenval.argsort()[::-1]
             self.eigenval = eigenval[idx]
             self.eigenvec = eigenvec[:, idx]
+            # normalise so that the first value of eigenvec array that is not zero is positive
+            index_first_values = np.argmax(np.abs(self.eigenvec), axis=0)
+            for i, row in enumerate(self.eigenvec.T):
+                self.eigenvec[:, i] *= - np.sign(row[index_first_values[i]])
         return self.eigenval, self.eigenvec
 
     def get_its(self, num_eigenv: int = 15, **kwargs):
