@@ -58,7 +58,7 @@ class FlatSQRA:
                 for i, _ in enumerate(self.transition_matrix):
                     # only for neighbours
                     if surface_areas[i, j]:
-                        self.transition_matrix[i, j] *= np.exp((potentials[i]-potentials[j])*1000/(R*self.T))
+                        self.transition_matrix[i, j] *= np.exp((potentials[i]-potentials[j])*1000/(2*R*self.T))
             self.transition_matrix[np.isnan(self.transition_matrix)] = 0.0
             # normalise rows
             sums = np.sum(self.transition_matrix, axis=0)
@@ -78,11 +78,8 @@ class FlatSQRA:
         """
         if self.eigenvec is None or self.eigenval is None or len(self.eigenval) < num_eigenv:
             tm = self.get_transition_matrix()
-            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="SR", sigma=0, **kwargs) #
+            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="LR", sigma=0, **kwargs) #
             num_rad = self.discretisation_grid.num_radial
-            print("eigv", eigenvec[:num_rad, :])
-            print("pot", self.get_potentials()[:num_rad])
-            print("pop", self.get_populations()[:num_rad])
             # don't need to deal with complex outputs in case all values are real
             if eigenvec.imag.max() == 0 and eigenval.imag.max() == 0:
                 eigenvec = eigenvec.real

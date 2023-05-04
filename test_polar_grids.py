@@ -4,20 +4,35 @@ Tests for polar_grids module.
 from scipy.constants import pi
 import numpy as np
 
-from polar_grids import PolarGrid
+from polar_grids import PolarGrid, from_polar_to_cartesian
+
+
+def test_conversion():
+    """Tests simple conversion (r, theta) -> (x, y)"""
+    my_rs = np.array([0, 1, 1.5, 1.2])
+    my_thetas = np.array([pi/7, pi/2, 3*pi, pi/4])
+    expected_xs = np.array([0, 0, -1.5, np.sqrt(2)/2 * 1.2])
+    expected_ys = np.array([0, 1, 0, np.sqrt(2) / 2 * 1.2])
+    conv_result = from_polar_to_cartesian(my_rs, my_thetas)
+    assert np.allclose(conv_result[0], expected_xs)
+    assert np.allclose(conv_result[1], expected_ys)
 
 
 def test_polar_grid():
     my_polar_grid = PolarGrid(num_radial=3, num_angular=4, r_lim=(0, 10))
 
     # correct 1D grids
-    assert np.allclose(my_polar_grid.rs, [0, 5, 10])
-    assert np.allclose(my_polar_grid.thetas, [0, pi/2, pi, 3*pi/2])
+    assert np.allclose(my_polar_grid.get_rs(), [0, 5, 10])
+    assert np.allclose(my_polar_grid.get_thetas(), [0, pi/2, pi, 3*pi/2])
 
     # radial grid only
     expected_rad_grid = np.array([[0, 15.6], [5, 15.6], [10, 15.6]])
     real_rad_grid = my_polar_grid.get_radial_grid(theta=15.6)
     assert np.allclose(real_rad_grid, expected_rad_grid)
+
+    # angular grid only
+    exp_unit_angular = np.array([[1, 0], [1, pi/2], [1, pi], [1, 3*pi/2]])
+    assert np.allclose(my_polar_grid.get_unit_angular_grid(), exp_unit_angular)
 
     # shape and content of polar meshgrids
 
@@ -45,6 +60,7 @@ def test_polar_grid():
     # flattened grids
     exp_flat_polar = np.array([[0, 0], [5, 0], [10, 0], [0, pi/2], [5, pi/2], [10, pi/2], [0, pi], [5, pi], [10, pi],
                                [0, 3*pi/2], [5, 3*pi/2], [10, 3*pi/2]])
+
     assert np.allclose(my_polar_grid.get_flattened_polar_coords(), exp_flat_polar)
 
     rs_flat = exp_flat_polar.T[0]
@@ -59,6 +75,25 @@ def test_polar_grid():
     num_rad = 22
     num_ang = 37
     my_polar_grid2 = PolarGrid(r_lim=(3, 8), num_radial=num_rad, num_angular=num_ang)
+
+    # correct 1D grids
+    expected_rs2 = [3., 3.23809524, 3.47619048, 3.71428571, 3.95238095, 4.19047619, 4.42857143, 4.66666667, 4.9047619,
+                    5.14285714, 5.38095238, 5.61904762, 5.85714286, 6.0952381,  6.33333333, 6.57142857, 6.80952381,
+                    7.04761905, 7.28571429, 7.52380952, 7.76190476, 8.]
+    expected_thetas2 = [0., 0.16981582, 0.33963164, 0.50944746, 0.67926328, 0.8490791, 1.01889491, 1.18871073,
+                        1.35852655, 1.52834237, 1.69815819, 1.86797401, 2.03778983, 2.20760565, 2.37742147, 2.54723729,
+                        2.71705311, 2.88686892, 3.05668474, 3.22650056, 3.39631638, 3.5661322,  3.73594802, 3.90576384,
+                        4.07557966, 4.24539548, 4.4152113,  4.58502712, 4.75484294, 4.92465875, 5.09447457, 5.26429039,
+                        5.43410621, 5.60392203, 5.77373785, 5.94355367, 6.11336949]
+
+    assert np.allclose(my_polar_grid2.get_rs(), expected_rs2)
+    assert np.allclose(my_polar_grid2.get_thetas(), expected_thetas2)
+
+    # unit cartesian grid
+    # expect that x^2 + y^2 = 1
+    x_uc, y_uc = my_polar_grid2.get_unit_cartesian_grid().T
+    assert np.allclose(x_uc ** 2 + y_uc ** 2, 1)
+
     polar_mg = my_polar_grid2.get_polar_meshgrid()
     cartesian_mg = my_polar_grid2.get_cartesian_meshgrid()
     assert polar_mg[0].shape == (num_ang, num_rad)
@@ -84,6 +119,7 @@ def test_neighbour_relationships():
     my_polar_grid = PolarGrid(r_lim=(3, 8), num_radial=num_rad, num_angular=num_ang)
 
     # layer indices
+    assert my_polar_grid._index_to_layer(0) == 0
     assert my_polar_grid._index_to_layer(1) == 1
     assert my_polar_grid._index_to_layer(7) == 2
     assert my_polar_grid._index_to_layer(5*8-1) == 4
@@ -233,6 +269,39 @@ def test_volumes():
     assert np.allclose(voronoi_volumes[2:74:5], pi * 5.5 ** 2 / 15 - pi * 4.5 ** 2 / 15)
     assert np.allclose(voronoi_volumes[3:74:5], pi * 6.5 ** 2 / 15 - pi * 5.5 ** 2 / 15)
     assert np.allclose(voronoi_volumes[4:74:5], pi * 7.5 ** 2 / 15 - pi * 6.5 ** 2 / 15)
+
+
+def test_layers_and_slices():
+    my_pg = PolarGrid(r_lim=(2, 18), num_radial=3, num_angular=5)
+    indices = list(range(3*5))
+
+    # all layer indices
+    layer_indices = []
+    for i in indices:
+        layer_indices.append(my_pg._index_to_layer(i))
+    assert layer_indices == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
+
+    # all slices indices
+    slices_indices = []
+    for i in indices:
+        slices_indices.append(my_pg._index_to_slice(i))
+    assert slices_indices == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]
+
+    # all indices per layer
+    all_0_layer = my_pg.get_all_indices_of_layer_i(0)
+    assert all_0_layer == [0, 3, 6, 9, 12]
+    all_1_layer = my_pg.get_all_indices_of_layer_i(1)
+    assert all_1_layer == [1, 4, 7, 10, 13]
+    all_2_layer = my_pg.get_all_indices_of_layer_i(2)
+    assert all_2_layer == [2, 5, 8, 11, 14]
+
+    # all indices per slice
+    all_0_slice = my_pg.get_all_indices_of_slice_j(0)
+    assert all_0_slice == [0, 1, 2]
+    all_1_slice = my_pg.get_all_indices_of_slice_j(1)
+    assert all_1_slice == [3, 4, 5]
+    all_last_slice = my_pg.get_all_indices_of_slice_j(4)
+    assert all_last_slice == [12, 13, 14]
 
 
 if __name__ == "__main__":

@@ -1,7 +1,13 @@
 """
-Polar coordinates are defined with a radius and an angle.
-
 A polar grid is a meshgrid of radial and angular discretisation (in equidistant steps).
+
+This module includes:
+    - conversion Cartesian/polar coordinates
+    - positioning points (r, theta) in a uniform polar grid
+    - calculating areas, dividing lines and distances between points
+
+Polar coordinates are defined with a radius and an angle. The radial direction is discretised between r_min and r_max.
+The angular direction is discretised on the entire circle, between (0, 2pi)
 
 Meshgrids are always given in the numpy convention.
 
@@ -25,16 +31,21 @@ from scipy.constants import pi
 from scipy.sparse import coo_array
 from scipy.spatial import SphericalVoronoi
 
-
 from molgri.space.utils import normalise_vectors
 
 
+# tested
 def from_polar_to_cartesian(rs: NDArray, thetas: NDArray) -> tuple[NDArray, NDArray]:
     """
-    Performs coordinate transform.
+    Performs coordinate transform from polar to cartesian coordinates.
 
-    Takes an array of radii and an array of angles - they should be of the same shape - and returns the arrays of
-    x and y coordinates in the same shapes.
+    Args:
+        rs: an array of any shape where each value is a particular radius
+        thetas: an array of the same shape as rs givind the angle (in radian) belonging to the corresponding radius
+
+    Returns:
+        (xs, ys): two arrays of the same shape as rs, thetas where the calculated coordinate transforms are saved
+
     """
     assert rs.shape == thetas.shape, f"Arrays of coordinates must be of same shape: {rs.shape}!={thetas.shape}"
     return rs * np.cos(thetas), rs * np.sin(thetas)
@@ -48,8 +59,18 @@ class PolarGrid:
     """
 
     def __init__(self, r_lim: tuple[float, float] = None, num_radial: int = 50, num_angular: int = 50):
+        """
+        Create a polar grid.
+
+        Args:
+            r_lim: (minimal radius, maximal radius) at which points are positioned
+            num_radial: number of points in radial direction
+            num_angular: number of points in angular direction
+        """
         if r_lim is None:
             r_lim = (0.1, 10)
+
+        self._verify_input(r_lim=r_lim, num_radial=num_radial, num_angular=num_angular)
 
         self.r_lim = r_lim
         self.num_radial = num_radial
@@ -57,50 +78,112 @@ class PolarGrid:
         self.N_cells = self.num_radial * self.num_angular
 
         # 1D discretisations in radial and angular dimensions
-        self.rs = np.linspace(*r_lim, num=num_radial)
-        self.thetas = np.linspace(0, 2*pi, num=num_angular, endpoint=False)  # don't want endpoint because periodic!
+        self.rs = None
+        self.thetas = None
+        self.get_rs()
+        self.get_thetas()
 
-    def get_name(self):
+    def _verify_input(self, r_lim: tuple[float, float], num_radial: int, num_angular: int):
+        assert num_angular >= 1
+        assert num_radial >= 1
+        if r_lim[0] > r_lim[1]:
+            raise ValueError("The lower limit of the radial grid must be smaller than the higher limit.")
+        if num_radial == 1 and not np.allclose(r_lim[0], r_lim[1]):
+            raise ValueError(f"Cannot cover the entire span of radii {r_lim} with only one radial point. Change the"
+                             f"limits to a single value or increase the number of points.")
+
+    def __str__(self):
         return f"polar_grid_{self.r_lim[0]}_{self.r_lim[1]}_{self.num_radial}_{self.num_angular}"
 
+    #################################################################################################################
+    #                                GETTERS FOR ALL SORTS OF GRID REPRESENTATIONS
+    #################################################################################################################
+
+    # tested
+    def get_rs(self) -> NDArray:
+        """
+        Obtain a sorted array (smallest to largest) of all radii at which points are positioned.
+
+        Returns:
+            an array of point radii of length self.num_radial
+        """
+        if self.rs is None:
+            self.rs = np.linspace(*self.r_lim, num=self.num_radial)
+        assert len(self.rs) == self.num_radial
+        assert np.isclose(self.rs[0], self.r_lim[0])
+        assert np.isclose(self.rs[-1], self.r_lim[1])
+        return self.rs
+
+    # tested
+    def get_thetas(self) -> NDArray:
+        """
+        Obtain a sorted array (smallest to largest) of all angles at which points are positioned (all between 0, 2pi).
+
+        Returns:
+            an array of point angles of length self.num_angular
+        """
+        if self.thetas is None:
+            # don't want endpoint because periodic!
+            self.thetas = np.linspace(0, 2*pi, num=self.num_angular, endpoint=False)
+        assert len(self.thetas) == self.num_angular
+        assert np.isclose(self.thetas[0], 0)
+        return self.thetas
+
+    # tested
     def get_radial_grid(self, theta: float = 0) -> NDArray:
         """
+        Get an array of polar coordinates [(r1, theta), (r2, theta) ... (rN, theta)] featuring all radial distances but
+        a single constant value of theta.
+
+        Args:
+            theta: a value of the angle (in rad)
+
+        Returns:
+            [(r1, theta), (r2, theta) ... (rN, theta)] an array of shape (self.num_radial, 2)
+
         Get the radially spaced grid. Fill the angular component with a constant value theta (need not to be a part of
         angular grid). Result in flat coordinate grid convention.
         """
-        single_thetas = np.full(self.rs.shape, theta)
-        return np.dstack((self.rs, single_thetas)).squeeze()
+        single_thetas = np.full(self.num_radial, theta)
+        result = np.dstack((self.get_rs(), single_thetas)).squeeze()
+        assert result.shape == (self.num_radial, 2)
+        return result
 
-    def get_unit_angular_grid(self):
-        Rs, Thetas = np.meshgrid(np.array([1.]), self.thetas)
-        return np.vstack([Rs.ravel(), Thetas.ravel()]).T
+    # tested
+    def get_unit_angular_grid(self) -> NDArray:
+        """
+        Get an array of polar coordinates [(1, theta1), (1, theta2) ... (1, thetaM)] featuring all angular positions
+        but all at unit distance.
 
-    def get_unit_cartesian_grid(self):
-        mesh_rs, mesh_thetas = np.meshgrid(np.array([1.]), self.thetas)
+        Returns:
+            [(1, theta1), (1, theta2) ... (1, thetaM)] an array of shape (self.num_angular, 2)
+        """
+        Rs, Thetas = np.meshgrid(np.array([1.]), self.get_thetas())
+        result = np.vstack([Rs.ravel(), Thetas.ravel()]).T
+        assert result.shape == (self.num_angular, 2)
+        return result
+
+    # tested
+    def get_unit_cartesian_grid(self) -> NDArray:
+        """
+        Use the self.get_unit_angular_grid as a starting point and convert it to cartesian coordinates.
+
+        Returns:
+            [[x1, y1], [x2, y2] ... [xM, yM]],
+             where M is the number of angular points
+        """
+        mesh_rs, mesh_thetas = np.meshgrid(np.array([1.]), self.get_thetas())
         xs, ys = from_polar_to_cartesian(mesh_rs, mesh_thetas)
-        return np.vstack([xs.ravel(), ys.ravel()]).T
-
-    def get_between_radii(self):
-        radii = self.get_radial_grid().T[0]
-        # get increments to each radius, remove first one and add an extra one at the end with same distance as
-        # second-to-last one
-        increments = [radii[i]-radii[i-1] for i in range(1, len(radii))]
-        if len(increments) > 1:
-            increments.append(increments[-1])
-            increments = np.array(increments)
-            increments = increments / 2
-        else:
-            increments = np.array(increments)
-
-        between_radii = radii + increments
-        return between_radii
+        result = np.vstack([xs.ravel(), ys.ravel()]).T
+        assert result.shape == (self.num_angular, 2)
+        return result
 
     def get_polar_meshgrid(self) -> list[NDArray, NDArray]:
         """
         Return the r- and theta-meshgrid with all combinations of coordinates.
         The result is a list of two elements, each with shape (self.num_angular, self.num_radial)
         """
-        return np.meshgrid(self.rs, self.thetas)
+        return np.meshgrid(self.get_rs(), self.get_thetas())
 
     def get_cartesian_meshgrid(self) -> tuple[NDArray, NDArray]:
         """
@@ -123,6 +206,7 @@ class PolarGrid:
         xs, ys = self.get_cartesian_meshgrid()
         return np.vstack([xs.ravel(), ys.ravel()]).T
 
+    # TODO: delete or improve
     def assign_to_states(self, states_list: list):
         flat_coord = self.get_flattened_polar_coords()
         all_asignments = np.zeros((len(states_list), len(flat_coord)), dtype=bool)
@@ -134,18 +218,76 @@ class PolarGrid:
     #                                        VORONOI CELLS AND GEOMETRY
     #################################################################################################################
 
-    def _index_valid(self, index):
-        return index < self.num_angular * self.num_radial
+    def _index_valid(self, index: int) -> bool:
+        return 0 <= index < self.N_cells
 
-    def _index_to_layer(self, index):
+    def _index_to_layer(self, index: int) -> int:
+        """
+        Convert an index of flattened coordinates to the layer index they belong to.
+
+        Args:
+            index: an index of flat coordinates that identifies a cell
+
+        Returns:
+            a number between 0 and self.num_radial that indicates the layer (distance from origin) of this point
+
+        For example in a grid of 3 radial times 5 angular points, the layers are:
+        [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
+        """
         if not self._index_valid(index):
             return np.NaN
         return index % self.num_radial
 
-    def _index_to_slice(self, index):
+    def _index_to_slice(self, index: int) -> int:
+        """
+        Convert an index of flattened coordinates to the slice index they belong to.
+
+        Args:
+            index: an index of flat coordinates that identifies a cell
+
+        Returns:
+            a number between 0 and self.num_angular that indicates the slice (ray index) of this point
+
+        For example in a grid of 3 radial times 5 angular points, the slices are:
+        [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]
+        """
         if not self._index_valid(index):
             return np.NaN
         return index // self.num_radial
+
+    def get_all_indices_of_layer_i(self, i: int) -> list:
+        """
+        Get a list of flat grid indices that all belong to i-th layer
+
+        Args:
+            i: layer index between 0 and self.num_radial (end non-inclusive)
+
+        Returns:
+            a list of indices, all are values between 0 and self.N_cells (end non-inclusive)
+        """
+        all_indices = list(range(0, self.N_cells))
+        selected_indices = []
+        for my_ind in all_indices:
+            if self._index_to_layer(my_ind) == i:
+                selected_indices.append(my_ind)
+        return selected_indices
+
+    def get_all_indices_of_slice_j(self, j):
+        """
+        Get a list of flat grid indices that all belong to j-th row
+
+        Args:
+            j: ray index between 0 and self.num_angular (end non-inclusive)
+
+        Returns:
+            a list of indices, all are values between 0 and self.N_cells (end non-inclusive)
+        """
+        all_indices = list(range(0, self.N_cells))
+        selected_indices = []
+        for my_ind in all_indices:
+            if self._index_to_slice(my_ind) == j:
+                selected_indices.append(my_ind)
+        return selected_indices
 
     def _are_sideways_neighbours(self, index_1: int, index_2: int):
         if not self._index_valid(index_1) or not self._index_valid(index_2):
@@ -166,16 +308,31 @@ class PolarGrid:
     def get_full_voronoi_grid(self):
         return FlatVoronoiGrid(self)
 
+    def get_between_radii(self):
+        radii = self.get_radial_grid().T[0]
+        # get increments to each radius, remove first one and add an extra one at the end with same distance as
+        # second-to-last one
+        increments = [radii[i]-radii[i-1] for i in range(1, len(radii))]
+        if len(increments) > 1:
+            increments.append(increments[-1])
+            increments = np.array(increments)
+            increments = increments / 2
+        else:
+            increments = np.array(increments)
+
+        between_radii = radii + increments
+        return between_radii
+
     def get_distance_between_centers(self, index_1: int, index_2: int, print_message=True) -> Optional[float]:
         """From two indices (indicating position in flat grid), determine the straight or curved distance between their
         centers."""
         if self._are_sideways_neighbours(index_1, index_2):
             layer = self._index_to_layer(index_1)
-            radius = self.rs[layer]
+            radius = self.get_rs()[layer]
             return 2*pi*radius/self.num_angular
         elif self._are_ray_neighbours(index_1, index_2):
-            r_1 = self.rs[self._index_to_layer(index_1)]
-            r_2 = self.rs[self._index_to_layer(index_2)]
+            r_1 = self.get_rs()[self._index_to_layer(index_1)]
+            r_2 = self.get_rs()[self._index_to_layer(index_2)]
             return np.abs(r_2 - r_1)
         elif print_message:
             print(f"Points {index_1} and {index_2} are not neighbours.")
@@ -215,9 +372,9 @@ class FlatVoronoiGrid:
     #                           basic creation/getter functions
     ###################################################################################################################
 
-    def get_name(self) -> str:
+    def __str__(self) -> str:
         """Name for saving files."""
-        return f"voronoi_{self.full_grid.get_name()}"
+        return f"voronoi_{self.full_grid.__str__()}"
 
     def _change_voronoi_radius(self, sv: SphericalVoronoi, new_radius: float) -> SphericalVoronoi:
         """

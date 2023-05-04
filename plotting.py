@@ -379,20 +379,27 @@ class KineticsPlot(RepresentationCollection):
     @fig_ax_wrapper
     def make_one_eigenvector_ray_plot(self, eigenvec_index: int, **kwargs):
         eigenvals, eigenvecs = self.kinetics_model.get_eigenval_eigenvec(num_eigenv=eigenvec_index + 2)
-
+        xs = self.kinetics_model.discretisation_grid.get_rs()
         # shape: (number_cells, num_eigenvectors)
         # average over all directions so that the shape goes to (num_radial, num_eigenvectors)
         num_ray_cells = self.kinetics_model.discretisation_grid.num_radial
         num_angular = self.kinetics_model.discretisation_grid.num_angular
         eigenvecs = eigenvecs.T[eigenvec_index]
+        #eigenvecs = eigenvecs[num_ray_cells:2*num_ray_cells]
         # everything thet is at the same distance from origin should be averaged
-        eigenvecs = eigenvecs.reshape((num_ray_cells, num_angular))
-        eigenvecs = eigenvecs.T
-        eigenvecs = np.average(eigenvecs, axis=0)
+        for i in range(num_angular):
+            indices_i_ray = self.kinetics_model.discretisation_grid.get_all_indices_of_slice_j(i)
+            eigenvec_i_ray = np.take(eigenvecs, indices_i_ray)
+            sns.lineplot(ax=self.ax, x=xs, y=eigenvec_i_ray, **kwargs)
+        # eigenvecs = eigenvecs.reshape((num_ray_cells, num_angular))
+        #print(eig_per_layer)
+        # eigenvecs = eigenvecs.T
+        # eigenvecs = np.average(eigenvecs, axis=0)
 
-        xs = self.kinetics_model.discretisation_grid.rs
+
+        #print(len(eig_per_layer), len(xs))
         self.ax.set_ylabel(f"Eigenvector {eigenvec_index}")
-        sns.lineplot(ax=self.ax, x=xs, y=eigenvecs, **kwargs)
+        #sns.lineplot(ax=self.ax, x=xs, y=eig_per_layer, **kwargs)
 
 
 class ConvergenceWithAlphaPlot(RepresentationCollection):
@@ -519,13 +526,14 @@ if __name__ == "__main__":
     kp.make_one_eigenvector_ray_plot(0)
     kp.make_one_eigenvector_ray_plot(1)
     kp.make_one_eigenvector_ray_plot(2)
+    kp.make_eigenvalues_plot()
 
     cwap = ConvergenceWithAlphaPlot(pg)
     #cwap.plot_its_convergence()
     #cwap.plot_population_ray_convergence()
-    cwap.plot_eigenvector_ray_convergence(2)
-    cwap.plot_eigenvector_ray_convergence(0)
-    cwap.plot_eigenvector_ray_convergence(1)
+    #cwap.plot_eigenvector_ray_convergence(2)
+    #cwap.plot_eigenvector_ray_convergence(0)
+    #cwap.plot_eigenvector_ray_convergence(1)
 
     # for i, alpha in enumerate(alphas):
     #     potential = FlatDoubleWellAlpha(alpha)
