@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import numpy as np
+import scipy
 from numpy.typing import NDArray
 from scipy.constants import R
 from scipy.sparse.linalg import eigs, eigsh
@@ -43,7 +44,8 @@ class FlatSQRA:
         """
         Apply the formula:
 
-        Q_ij = D*S_ij/(h_i*V_i) * e^[(V_i-V_j)/(2*kB*T)]
+        Q_ij = D*S_ij/(h_i*V_i) * e^[(V_i-V_j)/(2*R*T)]
+        Units within the exponent: V [kJ/mol], RT [kj/mol]
         """
         if self.transition_matrix is None:
             surface_areas = self.get_surface_areas()
@@ -78,8 +80,9 @@ class FlatSQRA:
         """
         if self.eigenvec is None or self.eigenval is None or len(self.eigenval) < num_eigenv:
             tm = self.get_transition_matrix()
-            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="LR", sigma=0, **kwargs) #
-            num_rad = self.discretisation_grid.num_radial
+            sigma = 0
+            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="SM", tol=0, **kwargs) #,
+            #eigenval = 1/(eigenval - sigma)
             # don't need to deal with complex outputs in case all values are real
             if eigenvec.imag.max() == 0 and eigenval.imag.max() == 0:
                 eigenvec = eigenvec.real

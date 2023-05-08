@@ -523,6 +523,8 @@ if __name__ == "__main__":
     my_pot = FlatSymmetricalDoubleWell()
     kin_model = FlatSQRA(pg, my_pot)
     kp = KineticsPlot(kinetics_model=kin_model)
+    dist_plot = ArrayPlot(kin_model.get_transition_matrix())
+    dist_plot.make_heatmap_plot(data_name="trans")
     kp.make_one_eigenvector_ray_plot(0)
     kp.make_one_eigenvector_ray_plot(1)
     kp.make_one_eigenvector_ray_plot(2)

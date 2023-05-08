@@ -304,5 +304,11 @@ def test_layers_and_slices():
     assert all_last_slice == [12, 13, 14]
 
 
+def test_pairwise_properties():
+    my_pg = PolarGrid(r_lim=(2, 18), num_radial=3, num_angular=5)
+    my_voronoi = my_pg.get_full_voronoi_grid()
+    print(my_voronoi._get_property_all_pairs(my_voronoi._test_pair_property))
+
+
 if __name__ == "__main__":
-    test_volumes()
+    test_pairwise_properties()

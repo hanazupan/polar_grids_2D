@@ -422,6 +422,9 @@ class FlatVoronoiGrid:
         volumes = np.array(volumes)
         return volumes
 
+    def _test_pair_property(self, i, j, print_message=False):
+        return i+j
+
     def _get_property_all_pairs(self, method: Callable) -> coo_array:
         """
         Helper method for any property that is dependent on a pair of indices. Examples: obtaining all distances
