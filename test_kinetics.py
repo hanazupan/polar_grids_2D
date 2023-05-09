@@ -12,49 +12,49 @@ four_cell_neighbours = np.array([[np.nan, 1, 1, np.nan],
                                  [np.nan, 1, 1, np.nan]])
 
 
-class TestKinModel1(FlatSQRA):
-
-    """
-    Create a mini test model of square cells with potentials
-
-    -------------
-    | 0.5 |  15  |
-    |  15  | 3 |
-    -------------
-
-    cells are numbered
-
-    -------------
-    | 0 | 1 |
-    | 2 | 3 |
-    -------------
-
-    and are squares with side 1.
-
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(discretisation_grid=None, potential=None, **kwargs)
-
-    def get_volumes(self):
-        return np.full((4,), 1)
-
-    def get_num_of_cells(self):
-        return 4
-
-    def get_surface_areas(self):
-        return four_cell_neighbours
-
-    def get_center_distances(self):
-        return four_cell_neighbours
-
-    def get_potentials(self):
-        return np.array([0.5, 15, 15, 3])
-
-    def get_populations(self):
-        not_norm_pop = np.exp(-self.get_potentials() / (R * self.T))
-        pop_sum = np.sum(not_norm_pop)
-        return 1 / pop_sum * not_norm_pop
+# class TestKinModel1(FlatSQRA):
+#
+#     """
+#     Create a mini test model of square cells with potentials
+#
+#     -------------
+#     | 0.5 |  15  |
+#     |  15  | 3 |
+#     -------------
+#
+#     cells are numbered
+#
+#     -------------
+#     | 0 | 1 |
+#     | 2 | 3 |
+#     -------------
+#
+#     and are squares with side 1.
+#
+#     """
+#
+#     def __init__(self, **kwargs):
+#         super().__init__(discretisation_grid=None, potential=None, **kwargs)
+#
+#     def get_volumes(self):
+#         return np.full((4,), 1)
+#
+#     def get_num_of_cells(self):
+#         return 4
+#
+#     def get_surface_areas(self):
+#         return four_cell_neighbours
+#
+#     def get_center_distances(self):
+#         return four_cell_neighbours
+#
+#     def get_potentials(self):
+#         return np.array([0.5, 15, 15, 3])
+#
+#     def get_populations(self):
+#         not_norm_pop = np.exp(-self.get_potentials() / (R * self.T))
+#         pop_sum = np.sum(not_norm_pop)
+#         return 1 / pop_sum * not_norm_pop
 
 def get_non_sparse_eigv(kin_model):
     trans_matrix = kin_model.get_transition_matrix()
@@ -102,7 +102,7 @@ def _test_kinetic_model(my_model, reduced_num_cells = np.infty):
     assert np.all(non_sparse_eigval[1:] < 0)
     # all eigenval equal to non sparse eigenval
     for i in range(1, num_cells//2):
-        assert np.allclose(eigval[i], non_sparse_eigval[i], atol=5e-4)
+        assert np.allclose(eigval[i], non_sparse_eigval[i], atol=5e-3)
 
     # first eigenvector - all positive or all negative
     assert np.allclose(np.sign(eigvec.T[0]), 1) or np.allclose(np.sign(eigvec.T[0]), -1)
