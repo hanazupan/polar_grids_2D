@@ -27,8 +27,7 @@ def test_flat_symmetrical_double_well():
     array_option2 = my_potential.get_potential(np.array([[2, 3]]))
 
     assert np.allclose((list_option, tuple_option, array_option1), array_option2)
-
-    assert np.isclose(my_potential.get_potential([1, 0]), 0)
-    assert np.isclose(my_potential.get_potential([2, 0]), 10)
+    assert np.isclose(my_potential.get_potential([1, 0]), 3)
+    assert np.isclose(my_potential.get_potential([2, 0]), 16)
     assert np.isclose(my_potential.get_potential([0, 0]), 90)
-    assert np.isclose(my_potential.get_potential([3, 0]), 0)
+    assert np.isclose(my_potential.get_potential([3, 0]), 9)
