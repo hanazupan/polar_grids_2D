@@ -18,8 +18,8 @@ class TestKinModel1(FlatSQRA):
     Create a mini test model of square cells with potentials
 
     -------------
-    | 0.5 |  1  |
-    |  1  | 0.3 |
+    | 0.5 |  15  |
+    |  15  | 3 |
     -------------
 
     cells are numbered
