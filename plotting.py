@@ -531,11 +531,10 @@ if __name__ == "__main__":
     kp.make_one_eigenvector_plot(1)
 
     cwap = ConvergenceWithAlphaPlot(pg)
-    #cwap.plot_its_convergence()
-    #cwap.plot_population_ray_convergence()
-    #cwap.plot_eigenvector_ray_convergence(2)
-    #cwap.plot_eigenvector_ray_convergence(0)
-    #cwap.plot_eigenvector_ray_convergence(1)
+    cwap.plot_its_convergence()
+    cwap.plot_population_ray_convergence()
+    cwap.plot_eigenvector_ray_convergence(0)
+    cwap.plot_eigenvector_ray_convergence(1)
 
     # for i, alpha in enumerate(alphas):
     #     potential = FlatDoubleWellAlpha(alpha)
