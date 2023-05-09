@@ -63,7 +63,7 @@ class FlatSQRA:
                         self.transition_matrix[i, j] *= np.exp((potentials[i]-potentials[j])*1000/(2*R*self.T))
             self.transition_matrix[np.isnan(self.transition_matrix)] = 0.0
             # normalise rows
-            sums = np.sum(self.transition_matrix, axis=0)
+            sums = np.sum(self.transition_matrix, axis=1)
             np.fill_diagonal(self.transition_matrix, -sums)
         return self.transition_matrix
 
@@ -80,8 +80,8 @@ class FlatSQRA:
         """
         if self.eigenvec is None or self.eigenval is None or len(self.eigenval) < num_eigenv:
             tm = self.get_transition_matrix()
-            sigma = 0
-            eigenval, eigenvec = eigs(tm, num_eigenv, maxiter=100000, which="SM", tol=0, **kwargs) #,
+            # in order to compute left eigenvectors, compute right eigenvectors of the transpose
+            eigenval, eigenvec = eigs(tm.T, num_eigenv, maxiter=100000, which="SM", tol=0, **kwargs) #,
             #eigenval = 1/(eigenval - sigma)
             # don't need to deal with complex outputs in case all values are real
             if eigenvec.imag.max() == 0 and eigenval.imag.max() == 0:

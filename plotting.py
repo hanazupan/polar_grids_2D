@@ -131,8 +131,7 @@ class PotentialPlot(RepresentationCollection):
     """
 
     def __init__(self, acp: AnalyticalCircularPotential, grid: PolarGrid, *args, **kwargs):
-        data_name = acp.get_name()
-        super().__init__(data_name, *args, **kwargs)
+        super().__init__("potential", *args, **kwargs)
         self.acp = acp
         self.grid = grid
         self.default_cmap = "coolwarm"
@@ -242,8 +241,7 @@ class PolarPlot(RepresentationCollection):
 
     def __init__(self, pg: PolarGrid, *args, **kwargs):
         self.pg = pg
-        data_name = self.pg.get_name()
-        super().__init__(data_name, *args, **kwargs)
+        super().__init__("polar_grid", *args, **kwargs)
 
     @fig_ax_wrapper
     def plot_gridpoints(self, c = "black"):
@@ -529,6 +527,8 @@ if __name__ == "__main__":
     kp.make_one_eigenvector_ray_plot(1)
     kp.make_one_eigenvector_ray_plot(2)
     kp.make_eigenvalues_plot()
+    kp.make_one_eigenvector_plot(0)
+    kp.make_one_eigenvector_plot(1)
 
     cwap = ConvergenceWithAlphaPlot(pg)
     #cwap.plot_its_convergence()

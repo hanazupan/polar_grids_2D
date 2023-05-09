@@ -68,11 +68,33 @@ def get_non_sparse_eigv(kin_model):
         eigenval = eigenval.real
     return eigenval, left_eigenvec
 
-def test_model1():
-    m1 = TestKinModel1()
-    eigval, eigvec = m1.get_eigenval_eigenvec(2)
 
-    non_sparse_eigval, non_sparse_eigenvec = get_non_sparse_eigv(m1)
+def _test_kinetic_model(my_model, num_cells):
+    """
+    Perform basic tests on the kinetic model of SqRA:
+        1) eigenvalues: first zero, then all below zero
+        2) eigenvectors: first no sign change, second one sign change ...
+    Args:
+        my_model:
+        num_cells:
+
+    Returns:
+
+    """
+    eigval, eigvec = my_model.get_eigenval_eigenvec(num_cells//2)
+
+    non_sparse_eigval, non_sparse_eigenvec = get_non_sparse_eigv(my_model)
+
+    # rate matrix is 0 for ij where i=/=j and i and j are not neighbours
+    rate_matrix = my_model.get_transition_matrix()
+    neighbours = ~np.isnan(my_model.get_surface_areas())
+    np.fill_diagonal(neighbours, True)
+    # fields that are not neighbours or diagonals must be zero
+    assert np.allclose(rate_matrix[~neighbours], 0)
+    # row sum of rate matrix must be zero
+    for row in rate_matrix:
+        assert np.allclose(np.sum(row), 0)
+
     # first eigenvalue close to zero
     assert np.isclose(eigval[0], 0)
     # subsequent eigenvalues all negative
@@ -83,8 +105,24 @@ def test_model1():
 
     # first eigenvector - all positive or all negative
     assert np.allclose(np.sign(eigvec.T[0]), 1) or np.allclose(np.sign(eigvec.T[0]), -1)
-    print(eigvec.T[0], non_sparse_eigenvec.T[0])
-    print(m1.get_its(2))
+
+    # i-th eigenvector (starting with 0) has i sign changes
+    for i in range(num_cells//2):
+        num_changes = (np.diff(np.sign(eigvec.T[i])) != 0)*1
+        assert np.count_nonzero(num_changes) == i
+
+    # eigenvectors the same as non-sparse ones (up to a sign)
+    for i in range(num_cells//2):
+        assert np.allclose(eigvec.T[i], non_sparse_eigenvec.T[i]) or np.allclose(eigvec.T[i], -non_sparse_eigenvec.T[i])
+
+
+def test_model1():
+    m1 = TestKinModel1()
+    _test_kinetic_model(m1, 4)
+    # because cells 1 and 2 have same potentials and shapes, the value of eigenvector there should be the same
+    eigval, eigvec = m1.get_eigenval_eigenvec(2)
+    assert np.isclose(eigvec.T[0][1], eigvec.T[0][2])
+
 
 if __name__ == "__main__":
     test_model1()
