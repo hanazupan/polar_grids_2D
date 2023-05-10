@@ -81,8 +81,7 @@ class FlatSQRA:
         if self.eigenvec is None or self.eigenval is None or len(self.eigenval) < num_eigenv:
             tm = self.get_transition_matrix()
             # in order to compute left eigenvectors, compute right eigenvectors of the transpose
-            eigenval, eigenvec = eigs(tm.T, num_eigenv, maxiter=100000, which="LM", sigma=0, tol=0, **kwargs) #,
-            #eigenval = 1/eigenval
+            eigenval, eigenvec = eigs(tm.T, num_eigenv, maxiter=100000, which="LM", sigma=0, tol=0, **kwargs)
             # don't need to deal with complex outputs in case all values are real
             if eigenvec.imag.max() == 0 and eigenval.imag.max() == 0:
                 eigenvec = eigenvec.real
