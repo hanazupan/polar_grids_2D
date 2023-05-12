@@ -158,8 +158,7 @@ def test_neighbour_relationships():
 def test_distances():
     my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
 
-    voronoi_grid = my_pg.get_full_voronoi_grid()
-    dist_array = voronoi_grid.get_all_distances_between_centers_as_numpy()
+    dist_array = my_pg.get_all_distances_between_centers_as_numpy()
 
     # assert is diagonal
     assert np.allclose(dist_array, dist_array.T, equal_nan=True)
@@ -205,9 +204,7 @@ def test_distances():
 
 def test_areas():
     my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
-
-    voronoi_grid = my_pg.get_full_voronoi_grid()
-    surf_array = voronoi_grid.get_all_voronoi_surfaces_as_numpy()
+    surf_array = my_pg.get_all_voronoi_surfaces_as_numpy()
 
     # assert is diagonal
     assert np.allclose(surf_array, surf_array.T, equal_nan=True)
@@ -259,8 +256,7 @@ def test_areas():
 
 def test_volumes():
     my_pg = PolarGrid(r_lim=(3, 7), num_radial=5, num_angular=15)
-    voronoi_grid = my_pg.get_full_voronoi_grid()
-    voronoi_volumes = voronoi_grid.get_all_voronoi_volumes()
+    voronoi_volumes = my_pg.get_all_voronoi_volumes()
 
     # first layer
     assert np.allclose(voronoi_volumes[0:74:5], pi*3.5**2/15)
@@ -306,8 +302,7 @@ def test_layers_and_slices():
 
 def test_pairwise_properties():
     my_pg = PolarGrid(r_lim=(2, 18), num_radial=3, num_angular=5)
-    my_voronoi = my_pg.get_full_voronoi_grid()
-    print(my_voronoi._get_property_all_pairs(my_voronoi._test_pair_property))
+    print(my_pg._get_property_all_pairs(my_pg._test_pair_property))
 
 
 if __name__ == "__main__":

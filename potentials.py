@@ -8,7 +8,6 @@ from typing import Callable
 import numpy as np
 from numpy.typing import NDArray, ArrayLike
 from scipy.constants import R, pi
-from scipy.integrate import dblquad
 
 
 class AnalyticalCircularPotential(ABC):

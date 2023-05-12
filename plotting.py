@@ -25,7 +25,7 @@ import matplotlib.pylab as pl
 
 from potentials import AnalyticalCircularPotential, FlatDoubleWellAlpha, RadialMinDoubleWellAlpha, \
     FlatSymmetricalDoubleWell
-from polar_grids import PolarGrid
+from polar_grids import PolarGrid, Grid, CartesianGrid
 
 
 #######################################################################################################################
@@ -241,7 +241,7 @@ class PotentialPlot(RepresentationCollection):
 
 class PolarPlot(RepresentationCollection):
 
-    def __init__(self, pg: PolarGrid, *args, **kwargs):
+    def __init__(self, pg: Grid, *args, **kwargs):
         self.pg = pg
         super().__init__("polar_grid", *args, **kwargs)
 
@@ -272,7 +272,7 @@ class PolarPlot(RepresentationCollection):
         if plot_gridpoints:
             self.plot_gridpoints(ax=self.ax, fig=self.fig, save=False)
 
-        voronoi_disc = self.pg.get_full_voronoi_grid().get_voronoi_discretisation()
+        voronoi_disc = self.pg.get_voronoi_discretisation()
 
         for i, sv in enumerate(voronoi_disc):
             plot_voronoi_cells(sv, self.ax, plot_vertex_points=plot_vertex_points)
@@ -535,16 +535,19 @@ class ConvergenceWithAlphaPlot(RepresentationCollection):
 
 
 if __name__ == "__main__":
-    pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=60, num_angular=5)
+    my_grid = CartesianGrid(num_x=10, num_y=20)
+    PolarPlot(my_grid).plot_gridpoints()
 
-    cwap = ConvergenceWithAlphaPlot(pg)
+    #pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=60, num_angular=5)
+
+    #cwap = ConvergenceWithAlphaPlot(pg)
     #cwap.plot_potential_convergence()
     #cwap.plot_eigenvector_convergence(0)
     #cwap.plot_eigenvector_convergence(1)
     #cwap.plot_eigenvector_convergence(2)
     # cwap.plot_its_convergence()
-    cwap.plot_population_ray_convergence()
-    cwap.plot_eigenvector_ray_convergence(0)
-    cwap.plot_eigenvector_ray_convergence(1)
-    cwap.plot_eigenvector_ray_convergence(2)
+    # cwap.plot_population_ray_convergence()
+    # cwap.plot_eigenvector_ray_convergence(0)
+    # cwap.plot_eigenvector_ray_convergence(1)
+    # cwap.plot_eigenvector_ray_convergence(2)
 

@@ -1,18 +1,17 @@
 from typing import Tuple
 
 import numpy as np
-import scipy
 from numpy.typing import NDArray
 from scipy.constants import R
 from scipy.sparse.linalg import eigs, eigsh
 
-from polar_grids import PolarGrid
+from polar_grids import Grid
 from potentials import AnalyticalCircularPotential
 
 
 class FlatSQRA:
 
-    def __init__(self, discretisation_grid: PolarGrid, potential: AnalyticalCircularPotential,
+    def __init__(self, discretisation_grid: Grid, potential: AnalyticalCircularPotential,
                  D: float = 1.0, T: float = 300.0):
         self.discretisation_grid = discretisation_grid
         self.potential = potential
@@ -23,16 +22,16 @@ class FlatSQRA:
         self.eigenvec = None
 
     def get_volumes(self):
-        return self.discretisation_grid.get_full_voronoi_grid().get_all_voronoi_volumes()
+        return self.discretisation_grid.get_all_voronoi_volumes()
 
     def get_num_of_cells(self):
-        return self.discretisation_grid.num_angular * self.discretisation_grid.num_radial
+        return self.discretisation_grid.get_N_cells()
 
     def get_surface_areas(self):
-        return self.discretisation_grid.get_full_voronoi_grid().get_all_voronoi_surfaces_as_numpy()
+        return self.discretisation_grid.get_all_voronoi_surfaces_as_numpy()
 
     def get_center_distances(self):
-        return self.discretisation_grid.get_full_voronoi_grid().get_all_distances_between_centers_as_numpy()
+        return self.discretisation_grid.get_all_distances_between_centers_as_numpy()
 
     def get_potentials(self):
         return self.potential.get_potential(self.discretisation_grid.get_flattened_polar_coords())
@@ -105,6 +104,7 @@ class FlatSQRA:
 
 if __name__ == "__main__":
     from potentials import FlatSymmetricalDoubleWell
+    from polar_grids import PolarGrid
     potential = FlatSymmetricalDoubleWell(10, 2, 1)
     pg = PolarGrid(r_lim=(3, 7), num_radial=50, num_angular=15)
     my_model = FlatSQRA(pg, potential)

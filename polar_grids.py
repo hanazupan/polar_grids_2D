@@ -22,6 +22,7 @@ Flat coordinate grids are given as arrays of coordinate pairs in the following c
 To create SphericalVoronoi cells from the grids, enumerate the flat cartesian version of the grid.
 """
 from __future__ import annotations
+from abc import ABC, abstractmethod
 from copy import copy
 from typing import Optional, Callable
 
@@ -51,7 +52,149 @@ def from_polar_to_cartesian(rs: NDArray, thetas: NDArray) -> tuple[NDArray, NDAr
     return rs * np.cos(thetas), rs * np.sin(thetas)
 
 
-class PolarGrid:
+class Grid(ABC):
+
+    @abstractmethod
+    def get_N_cells(self):
+        pass
+
+    @abstractmethod
+    def get_flattened_cartesian_coords(self) -> NDArray:
+        """
+        Return all combinations of x- and y coordinates in a flat coordinate pair format.
+        This is the property that gets numbered.
+        """
+        pass
+
+    def _get_property_all_pairs(self, method: Callable) -> coo_array:
+        """
+        Helper method for any property that is dependent on a pair of indices. Examples: obtaining all distances
+        between cell centers or all areas between cells. Always symmetrical - value at (i, j) equals the one at (j, i)
+
+        Args:
+            method: must have a signature (index1: int, index2: int, print_message: boolean)
+
+        Returns:
+            a sparse matrix of shape (len_flat_position_array, len_flat_position_array)
+        """
+        data = []
+        row_indices = []
+        column_indices = []
+        N_pos_array = len(self.get_flattened_cartesian_coords())
+        for i in range(N_pos_array):
+            for j in range(i + 1, N_pos_array):
+                my_property = method(i, j, print_message=False)
+                if my_property is not None:
+                    # this value will be added to coordinates (i, j) and (j, i)
+                    data.extend([my_property, my_property])
+                    row_indices.extend([i, j])
+                    column_indices.extend([j, i])
+        sparse_property = coo_array((data, (row_indices, column_indices)), shape=(N_pos_array, N_pos_array),
+                                    dtype=float)
+        return sparse_property
+
+    @abstractmethod
+    def get_all_voronoi_surfaces_as_numpy(self) -> NDArray:
+        """
+        If l is the length of the flattened position array, returns a lxl (sparse) array where the i-th row and j-th
+        column (as well as the j-th row and the i-th column) represent the size of the Voronoi surface between points
+        i and j in position grid. If the points do not share a division area, no value will be set.
+        """
+        pass
+
+    @abstractmethod
+    def get_all_distances_between_centers_as_numpy(self) -> NDArray:
+        """
+        Get a sparse matrix where for all sets of neighbouring cells the distance between Voronoi centers is provided.
+        Therefore, the value at [i][j] equals the value at [j][i]. For more information, check
+        self.get_distance_between_centers.
+        """
+        pass
+
+    @abstractmethod
+    def get_all_voronoi_volumes(self) -> NDArray:
+        """
+        Get an array in the same order as flat position grid, listing the volumes of Voronoi cells.
+        """
+        pass
+
+
+class CartesianGrid(Grid):
+
+    """
+    This is a rectangular grid in 2D.
+    """
+
+    def __init__(self, x_lim: tuple[float, float] = None, y_lim: tuple[float, float] = None, num_x: int = 50,
+                 num_y: int = 50):
+        if x_lim is None:
+            x_lim = (-4, 4)
+        if y_lim is None:
+            y_lim = (-4, 4)
+
+        self.x_lim = x_lim
+        self.y_lim = y_lim
+        self.num_x = num_x
+        self.num_y = num_y
+
+        # 1D discretisation
+        self.xs = np.linspace(*self.x_lim, num=self.num_x)
+        self.ys = np.linspace(*self.y_lim, num=self.num_y)
+        self.delta_x = self.xs[1] - self.xs[0]
+        self.delta_y = self.ys[1] - self.ys[0]
+
+    def get_N_cells(self):
+        return self.num_x * self.num_y
+
+    def get_flattened_cartesian_coords(self):
+        xs, ys = self.get_cartesian_meshgrid()
+        return np.vstack([xs.ravel(), ys.ravel()]).T
+
+    def get_cartesian_meshgrid(self) -> list[NDArray, NDArray]:
+        """
+        Return the r- and theta-meshgrid with all combinations of coordinates.
+        The result is a list of two elements, each with shape (self.num_angular, self.num_radial)
+        """
+        return np.meshgrid(self.xs, self.ys)
+
+    def _are_sideways_neig(self, i, j):
+        delta_index_one = np.abs(i-j) == 1
+        not_next_row = i // self.num_x == j // self.num_x
+        return delta_index_one and not_next_row
+
+    def _are_above_below_neig(self, i, j):
+        same_remainder = i % self.num_x == j % self.num_x
+        delta_index_x = np.abs(i-j) == self.num_x
+        return delta_index_x and same_remainder
+
+    def get_distance_between_centers(self, index_1: int, index_2: int, print_message = True) -> Optional[float]:
+        if self._are_sideways_neig(index_1, index_2):
+            return self.delta_x
+        if self._are_above_below_neig(index_1, index_2):
+            return self.delta_y
+
+    def get_division_area(self, index_1: int, index_2: int, print_message = True) -> Optional[float]:
+        if self._are_sideways_neig(index_1, index_2):
+            return self.delta_y
+        if self._are_above_below_neig(index_1, index_2):
+            return self.delta_x
+
+    def get_all_voronoi_surfaces_as_numpy(self) -> NDArray:
+        return self._get_property_all_pairs(self.get_division_area).toarray()
+
+
+    def get_all_distances_between_centers_as_numpy(self) -> NDArray:
+        return self._get_property_all_pairs(self.get_distance_between_centers).toarray()
+
+    def get_all_voronoi_volumes(self) -> NDArray:
+        """
+        For a rectangular grid, all "volumes" (areas) of cells are the same
+        """
+
+        return np.full((self.get_N_cells(),), self.delta_x*self.delta_y)
+
+
+class PolarGrid (Grid):
 
     """
     A polar grid always encompasses an entire circle (2pi rad) and a range of radii defined by r_lim. The number of
@@ -83,6 +226,9 @@ class PolarGrid:
         self.get_rs()
         self.get_thetas()
 
+        # voronoi
+        self.all_sv = None
+
     def _verify_input(self, r_lim: tuple[float, float], num_radial: int, num_angular: int):
         assert num_angular >= 1
         assert num_radial >= 1
@@ -94,6 +240,9 @@ class PolarGrid:
 
     def __str__(self):
         return f"polar_grid_{self.r_lim[0]}_{self.r_lim[1]}_{self.num_radial}_{self.num_angular}"
+
+    def get_N_cells(self):
+        return self.num_radial * self.num_angular
 
     #################################################################################################################
     #                                GETTERS FOR ALL SORTS OF GRID REPRESENTATIONS
@@ -305,9 +454,6 @@ class PolarGrid:
         neighbour_layer = np.abs(self._index_to_layer(index_1) - self._index_to_layer(index_2)) == 1
         return same_slice and neighbour_layer
 
-    def get_full_voronoi_grid(self):
-        return FlatVoronoiGrid(self)
-
     def get_between_radii(self):
         radii = self.get_radial_grid().T[0]
         # get increments to each radius, remove first one and add an extra one at the end with same distance as
@@ -354,28 +500,6 @@ class PolarGrid:
         elif print_message:
             print(f"Points {index_1} and {index_2} are not neighbours.")
 
-
-class FlatVoronoiGrid:
-
-    """
-   Equal to FullVoronoiGrid, but in 2D. Voranoi cells are now circular archs, again positioned at mid-radii
-
-    Enables calculations of all distances, areas, and volumes of/between cells.
-    """
-
-    def __init__(self, polar_grid: PolarGrid):
-        self.full_grid = polar_grid
-        self.flat_positions = self.full_grid.get_flattened_cartesian_coords()
-        self.all_sv = None
-
-    ###################################################################################################################
-    #                           basic creation/getter functions
-    ###################################################################################################################
-
-    def __str__(self) -> str:
-        """Name for saving files."""
-        return f"voronoi_{self.full_grid.__str__()}"
-
     def _change_voronoi_radius(self, sv: SphericalVoronoi, new_radius: float) -> SphericalVoronoi:
         """
         This is a helper function. Since a FullGrid consists of several layers of spheres in which the points are at
@@ -395,8 +519,8 @@ class FlatVoronoiGrid:
         get_between_radii for details.
         """
         if self.all_sv is None:
-            unit_sph_voronoi = SphericalVoronoi(self.full_grid.get_unit_cartesian_grid())
-            between_radii = self.full_grid.get_between_radii()
+            unit_sph_voronoi = SphericalVoronoi(self.get_unit_cartesian_grid())
+            between_radii = self.get_between_radii()
             self.all_sv = [self._change_voronoi_radius(unit_sph_voronoi, r) for r in between_radii]
         return self.all_sv
 
@@ -410,13 +534,13 @@ class FlatVoronoiGrid:
         """
         Get an array in the same order as flat position grid, listing the volumes of Voronoi cells.
         """
-        vor_radius = list(self.full_grid.get_between_radii())
+        vor_radius = list(self.get_between_radii())
         vor_radius.insert(0, 0)
         vor_radius = np.array(vor_radius)
-        ideal_volumes = pi * (vor_radius[1:] ** 2 - vor_radius[:-1] ** 2) / self.full_grid.num_angular
+        ideal_volumes = pi * (vor_radius[1:] ** 2 - vor_radius[:-1] ** 2) / self.num_angular
         volumes = []
-        for i, point in enumerate(self.full_grid.get_flattened_cartesian_coords()):
-            layer = i % self.full_grid.num_radial
+        for i, point in enumerate(self.get_flattened_cartesian_coords()):
+            layer = i % self.num_radial
             volumes.append(ideal_volumes[layer])
 
         volumes = np.array(volumes)
@@ -425,40 +549,13 @@ class FlatVoronoiGrid:
     def _test_pair_property(self, i, j, print_message=False):
         return i+j
 
-    def _get_property_all_pairs(self, method: Callable) -> coo_array:
-        """
-        Helper method for any property that is dependent on a pair of indices. Examples: obtaining all distances
-        between cell centers or all areas between cells. Always symmetrical - value at (i, j) equals the one at (j, i)
-
-        Args:
-            method: must have a signature (index1: int, index2: int, print_message: boolean)
-
-        Returns:
-            a sparse matrix of shape (len_flat_position_array, len_flat_position_array)
-        """
-        data = []
-        row_indices = []
-        column_indices = []
-        N_pos_array = len(self.flat_positions)
-        for i in range(N_pos_array):
-            for j in range(i + 1, N_pos_array):
-                my_property = method(i, j, print_message=False)
-                if my_property is not None:
-                    # this value will be added to coordinates (i, j) and (j, i)
-                    data.extend([my_property, my_property])
-                    row_indices.extend([i, j])
-                    column_indices.extend([j, i])
-        sparse_property = coo_array((data, (row_indices, column_indices)), shape=(N_pos_array, N_pos_array),
-                                    dtype=float)
-        return sparse_property
-
     def get_all_voronoi_surfaces(self) -> coo_array:
         """
         If l is the length of the flattened position array, returns a lxl (sparse) array where the i-th row and j-th
         column (as well as the j-th row and the i-th column) represent the size of the Voronoi surface between points
         i and j in position grid. If the points do not share a division area, no value will be set.
         """
-        return self._get_property_all_pairs(self.full_grid.get_division_area)
+        return self._get_property_all_pairs(self.get_division_area)
 
     def get_all_distances_between_centers(self) -> coo_array:
         """
@@ -466,7 +563,7 @@ class FlatVoronoiGrid:
         Therefore, the value at [i][j] equals the value at [j][i]. For more information, check
         self.get_distance_between_centers.
         """
-        return self._get_property_all_pairs(self.full_grid.get_distance_between_centers)
+        return self._get_property_all_pairs(self.get_distance_between_centers)
 
     def get_all_voronoi_surfaces_as_numpy(self) -> NDArray:
         """See self.get_all_voronoi_surfaces, only transforms sparse array to normal array."""
