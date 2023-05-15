@@ -192,6 +192,10 @@ class CartesianGrid(Grid):
         """
         return np.meshgrid(self.xs, self.ys)
 
+    def get_polar_meshgrid(self):
+        mesh_xs, mesh_ys = self.get_cartesian_meshgrid()
+        return from_cartesian_to_polar(mesh_xs, mesh_ys)
+
     def _are_sideways_neig(self, i: int, j: int) -> bool:
         """Determine if the cells with indices i and j are neighbours in the x direction."""
         delta_index_one = np.abs(i-j) == 1

@@ -535,17 +535,20 @@ class ConvergenceWithAlphaPlot(RepresentationCollection):
 
 
 if __name__ == "__main__":
-    my_grid = CartesianGrid(num_x=50, num_y=30)
-    #my_grid = PolarGrid(r_lim=(0.1, 3.9), num_radial=40, num_angular=30)
+    from potentials import RadialAndAngularWell
+    #my_grid = CartesianGrid(num_x=50, num_y=30)
+    my_grid = PolarGrid(r_lim=(0.1, 3.9), num_radial=40, num_angular=30)
     PolarPlot(my_grid).plot_gridpoints()
 
-    dw_potential = FlatSymmetricalDoubleWell()
-
-    kin_ex = FlatSQRA(my_grid, dw_potential)
-    kp = KineticsPlot(kin_ex)
-    kp.make_eigenvalues_plot()
-    kp.make_eigenvectors_plot()
-    kp.make_its_plot()
+    dw_potential = RadialAndAngularWell()
+    dw_plot = PotentialPlot(dw_potential, my_grid)
+    dw_plot.plot_potential_3D()
+    dw_plot.plot_potential_circles()
+    # kin_ex = FlatSQRA(my_grid, dw_potential)
+    # kp = KineticsPlot(kin_ex)
+    # kp.make_eigenvalues_plot()
+    # kp.make_eigenvectors_plot()
+    # kp.make_its_plot()
     #plt.show()
 
     #pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=60, num_angular=5)

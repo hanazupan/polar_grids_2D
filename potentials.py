@@ -131,6 +131,21 @@ class FlatDoubleWellAlpha(FlatSymmetricalDoubleWell):
         exp_part = self.alpha * np.exp(-self.exp_factor*(rs-self.exp_min)**2)
         return dw_part + exp_part
 
+class RadialAndAngularWell(FlatSymmetricalDoubleWell):
+
+    def __init__(self, k=5, f =3, x0 = 0, x1 = 2, **kwargs):
+        super().__init__(**kwargs)
+        self.k = k
+        self.f = f
+        self.x0 = x0
+        self.x1 = x1
+
+    def get_potential_polar_coord(self, circ_coordinates: ArrayLike):
+        thetas = circ_coordinates.T[1]
+        radial_part = super(RadialAndAngularWell, self).get_potential_polar_coord(circ_coordinates)
+        angular_part = self.k / 2 * (1 + np.cos(thetas - self.x0) + self.f*np.cos(thetas - self.x1))
+        return radial_part + angular_part
+
 
 class RadialMinDoubleWellAlpha(FlatDoubleWellAlpha):
     #TODO: needs to be periodic!
