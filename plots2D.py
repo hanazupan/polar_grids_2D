@@ -25,7 +25,7 @@ import matplotlib.pylab as pl
 
 from potentials import AnalyticalCircularPotential, FlatDoubleWellAlpha, RadialMinDoubleWellAlpha, \
     FlatSymmetricalDoubleWell
-from polar_grids import PolarGrid, Grid, CartesianGrid
+from grids2D import PolarGrid, Grid, CartesianGrid
 
 
 #######################################################################################################################
@@ -181,7 +181,7 @@ class PotentialPlot(RepresentationCollection):
         names = ["r < 2", "r > 2"]
         colors = ["red", "blue"]
 
-        population = self.acp.get_population(self.grid.get_flattened_polar_coords())
+        population = self.acp.get_population(self.grid.get_flattened_polar_coordinates())
         assignments = self.grid.assign_to_states(condition)
         for assig, name, color in zip(assignments, names, colors):
             self.ax.hlines(np.sum(population[assig]), 0, 1, color=color, label=name)
@@ -191,9 +191,9 @@ class PotentialPlot(RepresentationCollection):
     # ############################ PLOTS THAT ARE FLAT CIRCLES WITH COLORS IF NEEDED ###############################
 
     def _plot_circle(self, y_method: Callable, colorbar=False, colorbar_label=None, **kwargs):
-        coords = self.grid.get_flattened_polar_coords()
+        coords = self.grid.get_flattened_polar_coordinates()
         potentials = y_method(coords)
-        xy_coords = self.grid.get_flattened_cartesian_coords()
+        xy_coords = self.grid.get_flattened_cartesian_coordinates()
         s = kwargs.pop("s", 2)
         sns.scatterplot(x=xy_coords.T[0], y=xy_coords.T[1], ax=self.ax, hue=potentials, palette=self.default_cmap, s=s,
                         legend=False)
@@ -247,7 +247,7 @@ class PolarPlot(RepresentationCollection):
 
     @fig_ax_wrapper
     def plot_gridpoints(self, c = "black", **kwargs):
-        points = self.pg.get_flattened_cartesian_coords()
+        points = self.pg.get_flattened_cartesian_coordinates()
         cmap = "bwr"
         norm = kwargs.pop("norm", colors.TwoSlopeNorm(vcenter=0))
         self.ax.scatter(*points.T, c=c, cmap=cmap, norm=norm, **kwargs)
@@ -265,7 +265,7 @@ class PolarPlot(RepresentationCollection):
         origin = np.zeros((2,))
 
         if numbered:
-            points = self.pg.get_flattened_cartesian_coords()
+            points = self.pg.get_flattened_cartesian_coordinates()
             for i, point in enumerate(points):
                 self.ax.text(*point, s=f"{i}")
 

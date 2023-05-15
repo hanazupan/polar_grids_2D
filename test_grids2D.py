@@ -4,11 +4,11 @@ Tests for polar_grids module.
 from scipy.constants import pi
 import numpy as np
 
-from polar_grids import PolarGrid, from_polar_to_cartesian
+from grids2D import PolarGrid, from_polar_to_cartesian, from_cartesian_to_polar
 
 
 def test_conversion():
-    """Tests simple conversion (r, theta) -> (x, y)"""
+    """Tests simple conversion (r, theta) -> (x, y) and reverse"""
     my_rs = np.array([0, 1, 1.5, 1.2])
     my_thetas = np.array([pi/7, pi/2, 3*pi, pi/4])
     expected_xs = np.array([0, 0, -1.5, np.sqrt(2)/2 * 1.2])
@@ -16,6 +16,11 @@ def test_conversion():
     conv_result = from_polar_to_cartesian(my_rs, my_thetas)
     assert np.allclose(conv_result[0], expected_xs)
     assert np.allclose(conv_result[1], expected_ys)
+    # reverse
+    rs_result, thetas_result = from_cartesian_to_polar(expected_xs, expected_ys)
+    assert np.allclose(rs_result, my_rs)
+    # for the angle it is of course up to 2pi factor and impossible to recover for r=0
+    assert np.allclose(thetas_result[1:] % (2*pi), my_thetas[1:] % (2*pi))
 
 
 def test_polar_grid():
@@ -61,11 +66,11 @@ def test_polar_grid():
     exp_flat_polar = np.array([[0, 0], [5, 0], [10, 0], [0, pi/2], [5, pi/2], [10, pi/2], [0, pi], [5, pi], [10, pi],
                                [0, 3*pi/2], [5, 3*pi/2], [10, 3*pi/2]])
 
-    assert np.allclose(my_polar_grid.get_flattened_polar_coords(), exp_flat_polar)
+    assert np.allclose(my_polar_grid.get_flattened_polar_coordinates(), exp_flat_polar)
 
     rs_flat = exp_flat_polar.T[0]
 
-    flat_cartesian = my_polar_grid.get_flattened_cartesian_coords()
+    flat_cartesian = my_polar_grid.get_flattened_cartesian_coordinates()
     xs_flat = flat_cartesian.T[0]
     ys_flat = flat_cartesian.T[1]
 
@@ -101,8 +106,8 @@ def test_polar_grid():
     assert cartesian_mg[0].shape == (num_ang, num_rad)
     assert cartesian_mg[1].shape == (num_ang, num_rad)
     assert my_polar_grid2.get_radial_grid(theta=7).shape == (num_rad, 2)
-    flat_polar = my_polar_grid2.get_flattened_polar_coords()
-    flat_car = my_polar_grid2.get_flattened_cartesian_coords()
+    flat_polar = my_polar_grid2.get_flattened_polar_coordinates()
+    flat_car = my_polar_grid2.get_flattened_cartesian_coordinates()
     assert flat_polar.shape == (num_ang*num_rad, 2)
     assert flat_car.shape == (num_ang * num_rad, 2)
 
@@ -306,4 +311,5 @@ def test_pairwise_properties():
 
 
 if __name__ == "__main__":
+    test_conversion()
     test_pairwise_properties()

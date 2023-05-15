@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 from scipy.constants import R
 from scipy.sparse.linalg import eigs, eigsh
 
-from polar_grids import Grid
+from grids2D import Grid
 from potentials import AnalyticalCircularPotential
 
 
@@ -34,10 +34,10 @@ class FlatSQRA:
         return self.discretisation_grid.get_all_distances_between_centers_as_numpy()
 
     def get_potentials(self):
-        return self.potential.get_potential_polar_coord(self.discretisation_grid.get_flattened_polar_coords())
+        return self.potential.get_potential_polar_coord(self.discretisation_grid.get_flattened_polar_coordinates())
 
     def get_populations(self):
-        return self.potential.get_population(self.discretisation_grid.get_flattened_polar_coords(), T=self.T)
+        return self.potential.get_population(self.discretisation_grid.get_flattened_polar_coordinates(), T=self.T)
 
     def get_transition_matrix(self):
         """
@@ -104,7 +104,7 @@ class FlatSQRA:
 
 if __name__ == "__main__":
     from potentials import FlatSymmetricalDoubleWell
-    from polar_grids import PolarGrid
+    from grids2D import PolarGrid
     potential = FlatSymmetricalDoubleWell(10, 2, 1)
     pg = PolarGrid(r_lim=(3, 7), num_radial=50, num_angular=15)
     my_model = FlatSQRA(pg, potential)

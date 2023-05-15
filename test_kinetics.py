@@ -3,7 +3,7 @@ import scipy
 from scipy.constants import R
 
 from kinetics import FlatSQRA
-from polar_grids import PolarGrid
+from grids2D import PolarGrid
 from potentials import FlatSymmetricalDoubleWell
 
 four_cell_neighbours = np.array([[np.nan, 1, 1, np.nan],

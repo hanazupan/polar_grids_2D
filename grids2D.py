@@ -1,9 +1,12 @@
 """
+Implements 2D grids (polar and cartesian).
+
 A polar grid is a meshgrid of radial and angular discretisation (in equidistant steps).
+A cartesian grid is a meshgrid of x- and y-discretisation (in equidistant steps).
 
 This module includes:
     - conversion Cartesian/polar coordinates
-    - positioning points (r, theta) in a uniform polar grid
+    - positioning points (r, theta) in a uniform polar/cartesian grid
     - calculating areas, dividing lines and distances between points
 
 Polar coordinates are defined with a radius and an angle. The radial direction is discretised between r_min and r_max.
@@ -19,12 +22,11 @@ Flat coordinate grids are given as arrays of coordinate pairs in the following c
   .....                                    ......
  [rN, thetaN]]                            [xN, yN]]
 
-To create SphericalVoronoi cells from the grids, enumerate the flat cartesian version of the grid.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from copy import copy
-from typing import Optional, Callable
+from typing import Optional, Callable, Tuple, List
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,32 +38,38 @@ from molgri.space.utils import normalise_vectors
 
 
 # tested
-def from_polar_to_cartesian(rs: NDArray, thetas: NDArray) -> tuple[NDArray, NDArray]:
+def from_polar_to_cartesian(rs: NDArray, thetas: NDArray) -> Tuple[NDArray, NDArray]:
     """
     Performs coordinate transform from polar to cartesian coordinates.
 
     Args:
         rs: an array of any shape where each value is a particular radius
-        thetas: an array of the same shape as rs givind the angle (in radian) belonging to the corresponding radius
+        thetas: an array of the same shape as rs giving the angle (in radian) belonging to the corresponding radius
 
     Returns:
-        (xs, ys): two arrays of the same shape as rs, thetas where the calculated coordinate transforms are saved
+        (xs, ys): two arrays of the same shape as (rs, thetas)where the calculated coordinate transforms are saved
 
     """
     assert rs.shape == thetas.shape, f"Arrays of coordinates must be of same shape: {rs.shape}!={thetas.shape}"
     return rs * np.cos(thetas), rs * np.sin(thetas)
 
 
-def from_cartesian_to_polar(xs: NDArray, ys: NDArray) -> tuple[NDArray, NDArray]:
+# tested
+def from_cartesian_to_polar(xs: NDArray, ys: NDArray) -> Tuple[NDArray, NDArray]:
     """
     Performs coordinate transform from polar to cartesian coordinates.
 
+    Args:
+        xs: an array of any shape where each value is a particular x-value
+        ys: an array of the same shape as xs giving the corresponding y-value
+
     Returns:
-        (rs, thetas)
+        (rs, thetas) two arrays of the same shape as (xs, ys) where the calculated coordinate transforms are saved
 
     """
     assert xs.shape == ys.shape, f"Arrays of coordinates must be of same shape: {xs.shape}!={ys.shape}"
     return np.sqrt(xs**2 + ys**2), np.arctan2(ys, xs)
+
 
 class Grid(ABC):
 
@@ -75,18 +83,19 @@ class Grid(ABC):
         pass
 
     @abstractmethod
-    def get_flattened_cartesian_coords(self) -> NDArray:
+    def get_flattened_cartesian_coordinates(self) -> NDArray:
         """
         Return all combinations of x- and y coordinates in a flat coordinate pair format.
         This is the property that gets numbered.
         """
         pass
 
-    def get_flattened_polar_coords(self) -> NDArray:
+    def get_flattened_polar_coordinates(self) -> NDArray:
         """
-        If nothing else implemented, convert cartesian ones.
+        Return all combinations of x- and y coordinates in a flat coordinate pair format.
+        If nothing else implemented, the generation happens as conversion from cartesian ones.
         """
-        cartesian_coo = self.get_flattened_cartesian_coords()
+        cartesian_coo = self.get_flattened_cartesian_coordinates()
         xs = cartesian_coo.T[0]
         ys = cartesian_coo.T[1]
         rs, thetas = from_cartesian_to_polar(xs, ys)
@@ -106,7 +115,7 @@ class Grid(ABC):
         data = []
         row_indices = []
         column_indices = []
-        N_pos_array = len(self.get_flattened_cartesian_coords())
+        N_pos_array = len(self.get_flattened_cartesian_coordinates())
         for i in range(N_pos_array):
             for j in range(i + 1, N_pos_array):
                 my_property = method(i, j, print_message=False)
@@ -148,10 +157,10 @@ class Grid(ABC):
 class CartesianGrid(Grid):
 
     """
-    This is a rectangular grid in 2D.
+    This is a rectangular grid in 2D with equal spacing along the x and y coordinate.
     """
 
-    def __init__(self, x_lim: tuple[float, float] = None, y_lim: tuple[float, float] = None, num_x: int = 50,
+    def __init__(self, x_lim: Tuple[float, float] = None, y_lim: Tuple[float, float] = None, num_x: int = 50,
                  num_y: int = 50):
         if x_lim is None:
             x_lim = (-4, 4)
@@ -169,45 +178,50 @@ class CartesianGrid(Grid):
         self.delta_x = self.xs[1] - self.xs[0]
         self.delta_y = self.ys[1] - self.ys[0]
 
-    def get_N_cells(self):
+    def get_N_cells(self) -> int:
         return self.num_x * self.num_y
 
-    def get_flattened_cartesian_coords(self):
+    def get_flattened_cartesian_coordinates(self) -> NDArray:
         xs, ys = self.get_cartesian_meshgrid()
         return np.vstack([xs.ravel(), ys.ravel()]).T
 
-    def get_cartesian_meshgrid(self) -> list[NDArray, NDArray]:
+    def get_cartesian_meshgrid(self) -> List[NDArray, NDArray]:
         """
         Return the r- and theta-meshgrid with all combinations of coordinates.
         The result is a list of two elements, each with shape (self.num_angular, self.num_radial)
         """
         return np.meshgrid(self.xs, self.ys)
 
-    def _are_sideways_neig(self, i, j):
+    def _are_sideways_neig(self, i: int, j: int) -> bool:
+        """Determine if the cells with indices i and j are neighbours in the x direction."""
         delta_index_one = np.abs(i-j) == 1
         not_next_row = i // self.num_x == j // self.num_x
         return delta_index_one and not_next_row
 
-    def _are_above_below_neig(self, i, j):
+    def _are_above_below_neig(self, i: int, j: int) -> bool:
+        """Determine if the cells with indices i and j are neighbours in the y direction."""
         same_remainder = i % self.num_x == j % self.num_x
         delta_index_x = np.abs(i-j) == self.num_x
         return delta_index_x and same_remainder
 
-    def get_distance_between_centers(self, index_1: int, index_2: int, print_message = True) -> Optional[float]:
+    def get_distance_between_centers(self, index_1: int, index_2: int, print_message: bool = True) -> Optional[float]:
         if self._are_sideways_neig(index_1, index_2):
             return self.delta_x
         if self._are_above_below_neig(index_1, index_2):
             return self.delta_y
+        if print_message:
+            print(f"Cells {index_1} and {index_2} are not neighbours.")
 
-    def get_division_area(self, index_1: int, index_2: int, print_message = True) -> Optional[float]:
+    def get_division_area(self, index_1: int, index_2: int, print_message: bool = True) -> Optional[float]:
         if self._are_sideways_neig(index_1, index_2):
             return self.delta_y
         if self._are_above_below_neig(index_1, index_2):
             return self.delta_x
+        if print_message:
+            print(f"Cells {index_1} and {index_2} are not neighbours.")
 
     def get_all_voronoi_surfaces_as_numpy(self) -> NDArray:
         return self._get_property_all_pairs(self.get_division_area).toarray()
-
 
     def get_all_distances_between_centers_as_numpy(self) -> NDArray:
         return self._get_property_all_pairs(self.get_distance_between_centers).toarray()
@@ -216,7 +230,6 @@ class CartesianGrid(Grid):
         """
         For a rectangular grid, all "volumes" (areas) of cells are the same
         """
-
         return np.full((self.get_N_cells(),), self.delta_x*self.delta_y)
 
 
@@ -227,7 +240,7 @@ class PolarGrid (Grid):
     equally spaced points in the radial and angular discretisation can be individually controlled.
     """
 
-    def __init__(self, r_lim: tuple[float, float] = None, num_radial: int = 50, num_angular: int = 50):
+    def __init__(self, r_lim: Tuple[float, float] = None, num_radial: int = 50, num_angular: int = 50):
         """
         Create a polar grid.
 
@@ -255,7 +268,7 @@ class PolarGrid (Grid):
         # voronoi
         self.all_sv = None
 
-    def _verify_input(self, r_lim: tuple[float, float], num_radial: int, num_angular: int):
+    def _verify_input(self, r_lim: Tuple[float, float], num_radial: int, num_angular: int):
         assert num_angular >= 1
         assert num_radial >= 1
         if r_lim[0] > r_lim[1]:
@@ -353,28 +366,28 @@ class PolarGrid (Grid):
         assert result.shape == (self.num_angular, 2)
         return result
 
-    def get_polar_meshgrid(self) -> list[NDArray, NDArray]:
+    def get_polar_meshgrid(self) -> List[NDArray, NDArray]:
         """
         Return the r- and theta-meshgrid with all combinations of coordinates.
         The result is a list of two elements, each with shape (self.num_angular, self.num_radial)
         """
         return np.meshgrid(self.get_rs(), self.get_thetas())
 
-    def get_cartesian_meshgrid(self) -> tuple[NDArray, NDArray]:
+    def get_cartesian_meshgrid(self) -> Tuple[NDArray, NDArray]:
         """
         Take the polar meshgrid and convert it to a x- and y-meshgrid.
         """
         mesh_rs, mesh_thetas = self.get_polar_meshgrid()
         return from_polar_to_cartesian(mesh_rs, mesh_thetas)
 
-    def get_flattened_polar_coords(self) -> NDArray:
+    def get_flattened_polar_coordinates(self) -> NDArray:
         """
         Return all combinations of r- and theta coordinates in a flat coordinate pair format.
         """
         Rs, Thetas = self.get_polar_meshgrid()
         return np.vstack([Rs.ravel(), Thetas.ravel()]).T
 
-    def get_flattened_cartesian_coords(self) -> NDArray:
+    def get_flattened_cartesian_coordinates(self) -> NDArray:
         """
         Return all combinations of x- and y coordinates in a flat coordinate pair format.
         """
@@ -383,7 +396,7 @@ class PolarGrid (Grid):
 
     # TODO: delete or improve
     def assign_to_states(self, states_list: list):
-        flat_coord = self.get_flattened_polar_coords()
+        flat_coord = self.get_flattened_polar_coordinates()
         all_asignments = np.zeros((len(states_list), len(flat_coord)), dtype=bool)
         for i, state in enumerate(states_list):
             all_asignments[i] = state(*flat_coord.T)
@@ -430,7 +443,7 @@ class PolarGrid (Grid):
             return np.NaN
         return index // self.num_radial
 
-    def get_all_indices_of_layer_i(self, i: int) -> list:
+    def get_all_indices_of_layer_i(self, i: int) -> List:
         """
         Get a list of flat grid indices that all belong to i-th layer
 
@@ -447,7 +460,7 @@ class PolarGrid (Grid):
                 selected_indices.append(my_ind)
         return selected_indices
 
-    def get_all_indices_of_slice_j(self, j):
+    def get_all_indices_of_slice_j(self, j: int) -> List:
         """
         Get a list of flat grid indices that all belong to j-th row
 
@@ -464,7 +477,7 @@ class PolarGrid (Grid):
                 selected_indices.append(my_ind)
         return selected_indices
 
-    def _are_sideways_neighbours(self, index_1: int, index_2: int):
+    def _are_sideways_neighbours(self, index_1: int, index_2: int) -> bool:
         if not self._index_valid(index_1) or not self._index_valid(index_2):
             raise AttributeError("Index beyond the scope of the grid.")
         same_layer = self._index_to_layer(index_1) == self._index_to_layer(index_2)
@@ -473,14 +486,14 @@ class PolarGrid (Grid):
         neighbour_slice = np.abs(slice_2 - slice_1) == 1 or np.abs(slice_2 - slice_1) == self.num_angular - 1
         return same_layer and neighbour_slice
 
-    def _are_ray_neighbours(self, index_1: int, index_2: int):
+    def _are_ray_neighbours(self, index_1: int, index_2: int) -> bool:
         if not self._index_valid(index_1) or not self._index_valid(index_2):
             raise AttributeError("Index beyond the scope of the grid.")
         same_slice = self._index_to_slice(index_1) == self._index_to_slice(index_2)
         neighbour_layer = np.abs(self._index_to_layer(index_1) - self._index_to_layer(index_2)) == 1
         return same_slice and neighbour_layer
 
-    def get_between_radii(self):
+    def get_between_radii(self) -> NDArray:
         radii = self.get_radial_grid().T[0]
         # get increments to each radius, remove first one and add an extra one at the end with same distance as
         # second-to-last one
@@ -538,7 +551,7 @@ class PolarGrid (Grid):
         # important that it's a copy!
         return copy(sv)
 
-    def get_voronoi_discretisation(self) -> list[SphericalVoronoi]:
+    def get_voronoi_discretisation(self) -> List[SphericalVoronoi]:
         """
         Create a list of spherical voronoi-s that are identical except at different radii. The radii are set in such a
         way that there is always a Voronoi cell layer right in-between two layers of grid cells. (see FullGrid method
@@ -565,7 +578,7 @@ class PolarGrid (Grid):
         vor_radius = np.array(vor_radius)
         ideal_volumes = pi * (vor_radius[1:] ** 2 - vor_radius[:-1] ** 2) / self.num_angular
         volumes = []
-        for i, point in enumerate(self.get_flattened_cartesian_coords()):
+        for i, point in enumerate(self.get_flattened_cartesian_coordinates()):
             layer = i % self.num_radial
             volumes.append(ideal_volumes[layer])
 
