@@ -52,10 +52,26 @@ def from_polar_to_cartesian(rs: NDArray, thetas: NDArray) -> tuple[NDArray, NDAr
     return rs * np.cos(thetas), rs * np.sin(thetas)
 
 
+def from_cartesian_to_polar(xs: NDArray, ys: NDArray) -> tuple[NDArray, NDArray]:
+    """
+    Performs coordinate transform from polar to cartesian coordinates.
+
+    Returns:
+        (rs, thetas)
+
+    """
+    assert xs.shape == ys.shape, f"Arrays of coordinates must be of same shape: {xs.shape}!={ys.shape}"
+    return np.sqrt(xs**2 + ys**2), np.arctan2(ys, xs)
+
 class Grid(ABC):
 
+    """
+    Abstract grid description defining all properties that a SqRA modell needs to know.
+    """
+
     @abstractmethod
-    def get_N_cells(self):
+    def get_N_cells(self) -> int:
+        """Obtain the total number of cells in the grid."""
         pass
 
     @abstractmethod
@@ -65,6 +81,16 @@ class Grid(ABC):
         This is the property that gets numbered.
         """
         pass
+
+    def get_flattened_polar_coords(self) -> NDArray:
+        """
+        If nothing else implemented, convert cartesian ones.
+        """
+        cartesian_coo = self.get_flattened_cartesian_coords()
+        xs = cartesian_coo.T[0]
+        ys = cartesian_coo.T[1]
+        rs, thetas = from_cartesian_to_polar(xs, ys)
+        return np.vstack([rs.ravel(), thetas.ravel()]).T
 
     def _get_property_all_pairs(self, method: Callable) -> coo_array:
         """

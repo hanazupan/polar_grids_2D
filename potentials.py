@@ -20,8 +20,19 @@ class AnalyticalCircularPotential(ABC):
     def get_name(self):
         return "analytical_potential"
 
+    def _check_coordinate_dim(self, coords: ArrayLike):
+        # several coordinate pairs provided at once
+        if len(coords) > 2:
+            coord_shape = coords.shape
+            assert len(coord_shape) == 2 and coord_shape[1] == 2, f"Must have shape (N, 2), not {coord_shape}"
+        # a pair of coordinates provided - should be transformed to same format
+        else:
+            coords = np.array(coords)
+            coords.reshape((1, 2))
+        return coords
+
     @abstractmethod
-    def get_potential(self, circ_coordinates: ArrayLike):
+    def get_potential_polar_coord(self, circ_coordinates: ArrayLike):
         """
         Get potential at circular coordinates (r, theta) or an array of coordinate pairs
 
@@ -39,15 +50,7 @@ class AnalyticalCircularPotential(ABC):
 
         Unit of potential is kJ/mol.
         """
-        # several coordinate pairs provided at once
-        if len(circ_coordinates) > 2:
-            coord_shape = circ_coordinates.shape
-            assert len(coord_shape) == 2 and coord_shape[1] == 2, f"Must have shape (N, 2), not {coord_shape}"
-        # a pair of coordinates provided - should be transformed to same format
-        else:
-            circ_coordinates = np.array(circ_coordinates)
-            circ_coordinates.reshape((1, 2))
-        return circ_coordinates
+        return self._check_coordinate_dim(circ_coordinates)
 
     def _meshgrid2flat(self, flat_function: Callable, r_meshgrid: NDArray, theta_meshgrid: NDArray):
         r_flat = np.reshape(r_meshgrid, (-1,))
@@ -60,7 +63,7 @@ class AnalyticalCircularPotential(ABC):
         """
         Use a meshgrid of coordinates and get a grid of potentials in the same shape back. Useful for 3D plots.
         """
-        return self._meshgrid2flat(self.get_potential, r_meshgrid, theta_meshgrid)
+        return self._meshgrid2flat(self.get_potential_polar_coord, r_meshgrid, theta_meshgrid)
 
     def get_population_as_meshgrid(self, r_meshgrid: NDArray, theta_meshgrid: NDArray) -> NDArray:
         return self._meshgrid2flat(self.get_population, r_meshgrid, theta_meshgrid)
@@ -70,7 +73,7 @@ class AnalyticalCircularPotential(ABC):
 
         pi_i = 1/Z * e^(-V_i/(RT)
         """
-        not_norm_pop = np.exp(-self.get_potential(circ_coordinates)*1000/(R*T))
+        not_norm_pop = np.exp(-self.get_potential_polar_coord(circ_coordinates) * 1000 / (R * T))
         pop_sum = np.sum(not_norm_pop)
         return 1/pop_sum*not_norm_pop
 
@@ -95,7 +98,7 @@ class FlatSymmetricalDoubleWell(AnalyticalCircularPotential):
     def get_name(self):
         return f"flat_sym_dw_{self.steepness}_{self.first_min_r}_{self.second_min_r}"
 
-    def get_potential(self, circ_coordinates: ArrayLike):
+    def get_potential_polar_coord(self, circ_coordinates: ArrayLike):
         """
         Here implement a very simple equal depth double well. The angle theta plays no role.
 
@@ -104,7 +107,7 @@ class FlatSymmetricalDoubleWell(AnalyticalCircularPotential):
         where A > 0 is the steepness of potential walls, m1 and m2 control both minima.
         The unit of potential is kJ/mol
         """
-        circ_coordinates = super().get_potential(circ_coordinates)
+        circ_coordinates = super().get_potential_polar_coord(circ_coordinates)
         rs = circ_coordinates.T[0]
         return self.steepness * ((rs - self.first_min_r)**2 - self.second_min_r)**2 + 3*rs
 
@@ -122,8 +125,8 @@ class FlatDoubleWellAlpha(FlatSymmetricalDoubleWell):
     def get_name(self):
         return f"flat_dw_alpha_{self.alpha}"
 
-    def get_potential(self, circ_coordinates: ArrayLike):
-        dw_part = super().get_potential(circ_coordinates)
+    def get_potential_polar_coord(self, circ_coordinates: ArrayLike):
+        dw_part = super().get_potential_polar_coord(circ_coordinates)
         rs = circ_coordinates.T[0]
         exp_part = self.alpha * np.exp(-self.exp_factor*(rs-self.exp_min)**2)
         return dw_part + exp_part
@@ -140,8 +143,8 @@ class RadialMinDoubleWellAlpha(FlatDoubleWellAlpha):
         self.radial_min1 = radial_min1
         self.radial_min2 = radial_min2
 
-    def get_potential(self, circ_coordinates: ArrayLike):
-        radial_part = super().get_potential(circ_coordinates)
+    def get_potential_polar_coord(self, circ_coordinates: ArrayLike):
+        radial_part = super().get_potential_polar_coord(circ_coordinates)
         thetas = circ_coordinates.T[1]
         theta_part = self.radial_steepness*((thetas-self.radial_min1)**2 - self.radial_min2)**2
         return radial_part * theta_part

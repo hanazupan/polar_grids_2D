@@ -165,7 +165,7 @@ class PotentialPlot(RepresentationCollection):
         A plot that shows how potential changes with radial distance for a specific angle theta.
         """
         color = kwargs.pop("color", "black")
-        return _ray_plot(pg=self.grid, ys_method=self.acp.get_potential, ax=self.ax, theta=theta, color=color, **kwargs)
+        return _ray_plot(pg=self.grid, ys_method=self.acp.get_potential_polar_coord, ax=self.ax, theta=theta, color=color, **kwargs)
 
     @fig_ax_wrapper
     def plot_population_ray(self, theta: float = 0, **kwargs):
@@ -206,7 +206,7 @@ class PotentialPlot(RepresentationCollection):
         """
         A plot that shows the view from above - concentrical circles of potential values.
         """
-        self._plot_circle(y_method=self.acp.get_potential, colorbar=colorbar, colorbar_label="Potential [kJ/mol]",
+        self._plot_circle(y_method=self.acp.get_potential_polar_coord, colorbar=colorbar, colorbar_label="Potential [kJ/mol]",
                           **kwargs)
 
     @fig_ax_wrapper
@@ -535,8 +535,18 @@ class ConvergenceWithAlphaPlot(RepresentationCollection):
 
 
 if __name__ == "__main__":
-    my_grid = CartesianGrid(num_x=10, num_y=20)
+    my_grid = CartesianGrid(num_x=50, num_y=30)
+    #my_grid = PolarGrid(r_lim=(0.1, 3.9), num_radial=40, num_angular=30)
     PolarPlot(my_grid).plot_gridpoints()
+
+    dw_potential = FlatSymmetricalDoubleWell()
+
+    kin_ex = FlatSQRA(my_grid, dw_potential)
+    kp = KineticsPlot(kin_ex)
+    kp.make_eigenvalues_plot()
+    kp.make_eigenvectors_plot()
+    kp.make_its_plot()
+    #plt.show()
 
     #pg = PolarGrid(r_lim=(0.1, 3.9), num_radial=60, num_angular=5)
 

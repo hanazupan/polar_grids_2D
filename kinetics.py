@@ -34,7 +34,7 @@ class FlatSQRA:
         return self.discretisation_grid.get_all_distances_between_centers_as_numpy()
 
     def get_potentials(self):
-        return self.potential.get_potential(self.discretisation_grid.get_flattened_polar_coords())
+        return self.potential.get_potential_polar_coord(self.discretisation_grid.get_flattened_polar_coords())
 
     def get_populations(self):
         return self.potential.get_population(self.discretisation_grid.get_flattened_polar_coords(), T=self.T)
